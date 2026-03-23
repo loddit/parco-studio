@@ -1,8 +1,31 @@
-import type { Dataset, LngLat } from "@/types/dataset";
+import type { Dataset, DatasetFeatureCollection, LngLat } from "@/types/dataset";
+import { createEmptyFeatureCollection } from "@/types/dataset";
 
 const DB_NAME = "parco-studio";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "datasets";
+
+function normalizeFeatureCollection(value: unknown): DatasetFeatureCollection {
+  if (
+    value &&
+    typeof value === "object" &&
+    "type" in value &&
+    value.type === "FeatureCollection" &&
+    "features" in value &&
+    Array.isArray(value.features)
+  ) {
+    return value as DatasetFeatureCollection;
+  }
+
+  return createEmptyFeatureCollection();
+}
+
+function hydrateDataset(dataset: Dataset | (Omit<Dataset, "features"> & { features?: unknown })) {
+  return {
+    ...dataset,
+    features: normalizeFeatureCollection(dataset.features),
+  } satisfies Dataset;
+}
 
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -10,7 +33,7 @@ function openDatabase() {
 
     request.onerror = () => reject(request.error);
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const database = request.result;
 
       if (!database.objectStoreNames.contains(STORE_NAME)) {
@@ -18,6 +41,21 @@ function openDatabase() {
           keyPath: "id",
         });
         store.createIndex("updatedAt", "updatedAt");
+      } else if (request.transaction && event.oldVersion < 2) {
+        const store = request.transaction.objectStore(STORE_NAME);
+        const cursorRequest = store.openCursor();
+
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+
+          if (!cursor) {
+            return;
+          }
+
+          const nextValue = hydrateDataset(cursor.value as Dataset);
+          cursor.update(nextValue);
+          cursor.continue();
+        };
       }
     };
 
@@ -48,7 +86,8 @@ export async function listDatasets() {
     const request = store.getAll();
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result as Dataset[]);
+    request.onsuccess = () =>
+      resolve((request.result as Dataset[]).map((dataset) => hydrateDataset(dataset)));
   });
 
   return datasets.sort(
@@ -61,7 +100,12 @@ export function getDataset(id: string) {
     const request = store.get(id);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result as Dataset | undefined);
+    request.onsuccess = () =>
+      resolve(
+        request.result
+          ? hydrateDataset(request.result as Dataset)
+          : undefined,
+      );
   });
 }
 
@@ -72,6 +116,7 @@ export function createDataset(name: string) {
     name: name.trim(),
     center: null,
     zoomLevel: null,
+    features: createEmptyFeatureCollection(),
     createdAt: now,
     updatedAt: now,
   };
@@ -86,7 +131,7 @@ export function createDataset(name: string) {
 
 export async function updateDataset(
   id: string,
-  updates: Partial<Pick<Dataset, "name" | "center" | "zoomLevel">>,
+  updates: Partial<Pick<Dataset, "name" | "center" | "zoomLevel" | "features">>,
 ) {
   const existing = await getDataset(id);
 
@@ -122,5 +167,18 @@ export function saveViewport(id: string, center: LngLat, zoomLevel: number) {
   return updateDataset(id, {
     center,
     zoomLevel,
+  });
+}
+
+export function saveDatasetState(
+  id: string,
+  center: LngLat,
+  zoomLevel: number,
+  features: DatasetFeatureCollection,
+) {
+  return updateDataset(id, {
+    center,
+    zoomLevel,
+    features,
   });
 }
