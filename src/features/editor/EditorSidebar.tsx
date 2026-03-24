@@ -1,12 +1,15 @@
 import {
-  IconMap,
+  IconChevronLeft,
   IconPoint,
   IconPointer,
   IconX,
   IconVectorSpline,
   IconVectorTriangle,
+  IconLayoutSidebarLeftExpand,
+  IconLayoutSidebarLeftCollapse,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import clsx from "clsx";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/Button";
 import { Select } from "@/components/Select";
@@ -69,28 +72,52 @@ export function EditorSidebar({
   selectedVerticesCount,
 }: EditorSidebarProps) {
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : false,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+
+    function handleMediaQueryChange(event: MediaQueryListEvent) {
+      setIsCollapsed(event.matches);
+    }
+
+    mediaQuery.addEventListener("change", handleMediaQueryChange);
+    return () => mediaQuery.removeEventListener("change", handleMediaQueryChange);
+  }, []);
 
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-r border-sky-100 bg-white/92 p-5">
-      <div className="flex items-center gap-3">
-        <Link
-          aria-label="Back to datasets"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-          to="/"
-        >
-          &lt;
-        </Link>
-        <h1 className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight text-slate-950">
-          {datasetName}
-        </h1>
+    <aside
+      className={clsx(
+        "flex shrink-0 flex-col border-r border-sky-100 bg-white/92 transition-[width,padding] duration-200",
+        isCollapsed ? "w-12 items-center px-1 py-4" : "w-[320px] p-5",
+      )}
+    >
+      <div className={clsx("flex gap-3", isCollapsed ? "flex-col items-center" : "items-center")}>
+        {isCollapsed ? null : (
+          <>
+            <Link
+              aria-label="Back to datasets"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              to="/"
+            >
+              <IconChevronLeft size={18} stroke={1.9} />
+            </Link>
+            <h1 className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight text-slate-950">
+              {datasetName}
+            </h1>
+          </>
+        )}
         <Button
-          aria-label="Open map settings"
-          className="h-10 w-10 shrink-0 rounded-full px-0"
-          onClick={() => setIsMapSettingsOpen(true)}
-          title="Map settings"
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="h-9 w-9 shrink-0 rounded-full px-0"
+          onClick={() => setIsCollapsed((current) => !current)}
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          type="button"
           variant="secondary"
         >
-          <IconMap size={22} stroke={1.9} />
+          {isCollapsed ? <IconLayoutSidebarLeftExpand size={18} stroke={1.9} /> : <IconLayoutSidebarLeftCollapse size={18} stroke={1.9} />}
         </Button>
       </div>
 
@@ -102,92 +129,121 @@ export function EditorSidebar({
         type="file"
       />
 
-      <div className="mt-4 flex gap-2">
-        <Button className="flex-1" onClick={onSave} variant="primary">
-          Save
-        </Button>
-        <Button className="flex-1" onClick={onReset} variant="secondary">
-          Reset
-        </Button>
-        <Button className="flex-1" onClick={onOpenImport} variant="secondary">
-          Import
-        </Button>
-      </div>
+      {isCollapsed ? null : (
+        <div className="mt-4 flex gap-2">
+          <Button className="flex-1" onClick={onSave} variant="primary">
+            Save
+          </Button>
+          <Button className="flex-1" onClick={onReset} variant="secondary">
+            Reset
+          </Button>
+          <Button className="flex-1" onClick={onOpenImport} variant="secondary">
+            Import
+          </Button>
+        </div>
+      )}
 
-      <div className="mt-6">
-        <p className="mb-2 text-sm font-medium text-slate-700">Mode</p>
-        <div className="grid grid-cols-4 gap-2">
+      <div className={clsx(isCollapsed ? "mt-4 w-full" : "mt-6")}>
+        {isCollapsed ? null : <p className="mb-2 text-sm font-medium text-slate-700">Mode</p>}
+        <div className={clsx("gap-2", isCollapsed ? "flex flex-col items-center" : "grid grid-cols-4")}>
           <ModeButton
             active={mode === "select"}
             icon={IconPointer}
+            isCollapsed={isCollapsed}
             label="Select"
             onClick={() => onModeChange("select")}
           />
           <ModeButton
             active={mode === "draw-point"}
             icon={IconPoint}
+            isCollapsed={isCollapsed}
             label="Point"
             onClick={() => onModeChange("draw-point")}
           />
           <ModeButton
             active={mode === "draw-line"}
             icon={IconVectorSpline}
+            isCollapsed={isCollapsed}
             label="LineString"
             onClick={() => onModeChange("draw-line")}
           />
           <ModeButton
             active={mode === "draw-polygon"}
             icon={IconVectorTriangle}
+            isCollapsed={isCollapsed}
             label="Polygon"
             onClick={() => onModeChange("draw-polygon")}
           />
         </div>
       </div>
 
-      <div className="mt-6 space-y-3 rounded-3xl border border-sky-100 bg-slate-50/80 p-4 text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-medium text-slate-700">Features</span>
-          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-            {featureCount}
-          </span>
-        </div>
-        <p className="text-slate-500">{getModeDescription(mode, draftCount)}</p>
-        {selectedFeature ? (
-          <SelectedFeatureCard
-            onDelete={onDeleteSelectedFeature}
-            onExport={onExportSelectedFeature}
-            selectedFeature={selectedFeature}
-            selectedFeatureLength={selectedFeatureLength}
-            selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
-            selectedVertexIndex={selectedVertexIndex}
-            selectedVerticesCount={selectedVerticesCount}
-          />
-        ) : (
-          <div className="rounded-2xl border border-dashed border-sky-200 bg-sky-50/70 px-4 py-3 text-slate-500">
-            {mode === "select"
-              ? "Click a feature to inspect and adjust its vertices."
-              : "Click on the map to place vertices. Press Enter or double-click to finish."}
+      {isCollapsed ? null : (
+        <div className="mt-6 space-y-3 rounded-3xl border border-sky-100 bg-slate-50/80 p-4 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-medium text-slate-700">Features</span>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+              {featureCount}
+            </span>
           </div>
-        )}
-        {draftCount > 0 ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
-            Draft vertices: {draftCount}
+          <p className="text-slate-500">{getModeDescription(mode, draftCount)}</p>
+          {selectedFeature ? (
+            <SelectedFeatureCard
+              onDelete={onDeleteSelectedFeature}
+              onExport={onExportSelectedFeature}
+              selectedFeature={selectedFeature}
+              selectedFeatureLength={selectedFeatureLength}
+              selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
+              selectedVertexIndex={selectedVertexIndex}
+              selectedVerticesCount={selectedVerticesCount}
+            />
+          ) : (
+            <div className="rounded-2xl border border-dashed border-sky-200 bg-sky-50/70 px-4 py-3 text-slate-500">
+              {mode === "select"
+                ? "Click a feature to inspect and adjust its vertices."
+                : "Click on the map to place vertices. Press Enter or double-click to finish."}
+            </div>
+          )}
+          {draftCount > 0 ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+              Draft vertices: {draftCount}
+            </div>
+          ) : null}
+          <div className="text-xs text-slate-400">
+            {isDirty ? "Unsaved changes" : "All changes saved"}
           </div>
-        ) : null}
-        <div className="text-xs text-slate-400">
-          {isDirty ? "Unsaved changes" : "All changes saved"}
         </div>
-      </div>
+      )}
+
+      {isCollapsed ? null : (
+        <div className="mt-auto pt-6">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-sky-100 bg-slate-50/80 px-4 py-3 text-sm">
+            <p className="text-slate-600">
+              <span className="font-medium text-slate-700">Map Service:</span>{" "}
+              {mapState.mapSourceOptions.find((option) => option.value === mapState.mapSource)?.label ??
+                mapState.mapSource}
+            </p>
+            <Button
+              aria-label="Open map settings"
+              className="shrink-0 rounded-full px-3 py-1.5 text-xs"
+              onClick={() => setIsMapSettingsOpen(true)}
+              type="button"
+              variant="secondary"
+            >
+              Edit
+            </Button>
+          </div>
+        </div>
+      )}
 
       {isMapSettingsOpen ? (
         <div
           aria-hidden="true"
-          className="fixed inset-0 z-40 bg-slate-950/18 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40 bg-slate-950/10 backdrop-blur-[1px]"
           onClick={() => setIsMapSettingsOpen(false)}
         >
           <div
             aria-modal="true"
-            className="absolute left-1/2 top-24 z-50 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-[28px] border border-sky-100 bg-white/88 p-5 shadow-2xl"
+            className="absolute left-1/2 top-24 z-50 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-[28px] border border-sky-100 bg-white/80 p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
           >
@@ -297,18 +353,23 @@ function SelectedFeatureCard({
 function ModeButton({
   active,
   icon: Icon,
+  isCollapsed,
   label,
   onClick,
 }: {
   active: boolean;
   icon: typeof IconPointer;
+  isCollapsed?: boolean;
   label: string;
   onClick: () => void;
 }) {
   return (
     <Button
       aria-label={label}
-      className="h-10 w-full rounded-2xl px-0"
+      className={clsx(
+        "px-0",
+        isCollapsed ? "h-9 w-9 rounded-2xl" : "h-10 w-full rounded-2xl",
+      )}
       onClick={onClick}
       title={label}
       variant={active ? "primary" : "secondary"}
