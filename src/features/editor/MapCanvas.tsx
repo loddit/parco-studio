@@ -6,7 +6,7 @@ import {
   IconSatellite,
   IconSun,
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import MapboxMap, {
   Layer as MapboxLayer,
   Marker as MapboxMarker,
@@ -29,7 +29,8 @@ import MapLibreMap, {
 } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import { Button } from "@/components/Button";
-import type { DatasetFeatureCollection, LngLat } from "@/types/dataset";
+import { GeocodingBar } from "./GeocodingBar";
+import type { DatasetFeatureCollection, LngLat, LngLatBounds } from "@/types/dataset";
 import {
   buildDraftFeatures,
   buildRenderableFeatures,
@@ -252,6 +253,22 @@ export function MapCanvas({
   const mapRef = useRef<MapboxMapRef | MapLibreMapRef | null>(null);
   const center = mapState.viewport.center;
   const zoom = mapState.viewport.zoomLevel;
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+  const handleLocationSelect = useCallback(
+    ({ center: locationCenter, bounds }: { center: LngLat; bounds?: LngLatBounds }) => {
+      if (bounds) {
+        mapActions.setPendingFitBounds(bounds);
+        return;
+      }
+
+      mapActions.setViewport({
+        center: locationCenter,
+        zoomLevel: mapState.viewport.zoomLevel,
+      });
+    },
+    [mapActions, mapState.viewport.zoomLevel],
+  );
   const renderedFeatures = useMemo(
     () => buildRenderableFeatures(features, selectedFeatureId),
     [features, selectedFeatureId],
@@ -432,24 +449,30 @@ export function MapCanvas({
         <NavigationControlComponent position="top-right" />
       </MapComponent>
       <div className="pointer-events-none absolute left-3 top-2 z-10">
-        <div className="pointer-events-auto flex items-center rounded-xl shadow-lg">
-          {mapState.mapStyleOptions.map((option) => {
-            const Icon = MAP_STYLE_ICON_MAP[option.value as keyof typeof MAP_STYLE_ICON_MAP] ?? IconMap;
+        <div className="pointer-events-auto flex items-start gap-2 px-2 py-2">
+          <div className="flex items-center rounded-xl bg-white">
+            {mapState.mapStyleOptions.map((option) => {
+              const Icon = MAP_STYLE_ICON_MAP[option.value as keyof typeof MAP_STYLE_ICON_MAP] ?? IconMap;
 
-            return (
-              <Button
-                className={
-                  `${mapState.mapStyle === option.value ? "bg-slate-300" : "bg-white"} h-8 min-w-8 rounded-none border-y-2 border-l-2 border-slate-500/20 px-1.5 text-slate-900 shadow-none first:rounded-l-xl last:rounded-r-xl last:border-r-2 hover:bg-slate-100`
-                }
-                key={option.value}
-                onClick={() => mapActions.setMapStyle(option.value as EditorMapStyle)}
-                title={option.label}
-                variant="ghost"
-              >
-                <Icon size={18} stroke={1.9} />
-              </Button>
-            );
-          })}
+              return (
+                <Button
+                  className={`${
+                    mapState.mapStyle === option.value ? "bg-slate-300" : "bg-white"
+                  } h-8 min-w-8 rounded-none border-y-2 border-l-2 border-slate-500/20 px-1.5 text-slate-900 shadow-none first:rounded-l-xl last:rounded-r-xl last:border-r-2 hover:bg-slate-100`}
+                  key={option.value}
+                  onClick={() => mapActions.setMapStyle(option.value as EditorMapStyle)}
+                  title={option.label}
+                  variant="ghost"
+                >
+                  <Icon size={18} stroke={1.9} />
+                </Button>
+              );
+            })}
+          </div>
+          <GeocodingBar
+            googleMapsApiKey={googleMapsApiKey}
+            onLocationSelect={handleLocationSelect}
+          />
         </div>
       </div>
     </div>
