@@ -10,9 +10,12 @@ import type {
   Polygon,
   Position,
 } from "geojson";
-import type { MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type { DatasetFeatureCollection, DatasetGeometry, LngLat } from "@/types/dataset";
 import type { EditorMode } from "./editor-types";
+
+type ClickedFeatureEvent = {
+  features?: Array<{ properties?: Record<string, unknown> | null }>;
+};
 
 export const FALLBACK_CENTER = { lat: 31.2304, lng: 121.4737 };
 export const FALLBACK_ZOOM = 10;
@@ -138,7 +141,7 @@ export function buildDraftFeatures(
   };
 }
 
-export function getClickedFeatureId(event: MapLayerMouseEvent) {
+export function getClickedFeatureId(event: ClickedFeatureEvent) {
   const clickedFeature = event.features?.find(
     (feature) => feature.properties && "featureId" in feature.properties,
   );

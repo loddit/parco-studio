@@ -16,7 +16,9 @@ cp .env.example .env
 ```
 
 - `VITE_GOOGLE_MAPS_API_KEY`: enables the Google Maps renderer in the dataset editor.
-- `VITE_MAPLIBRE_STYLE_URL`: optional style URL for the React Map GL renderer. Defaults to the MapLibre demo style.
+- `VITE_MAPBOX_ACCESS_TOKEN`: enables the Mapbox renderer in the dataset editor.
+- `VITE_MAPTILER_API_KEY`: enables MapTiler styles in the editor source switcher.
+- `VITE_PROTOMAPS_API_KEY`: enables Protomaps styles in the editor source switcher.
 
 ## Current scope
 

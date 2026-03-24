@@ -22,6 +22,7 @@ import {
   FALLBACK_ZOOM,
   formatLineLength,
   getFeatureBounds,
+  getClickedFeatureId,
   getFeatureMidpoints,
   getFeatureVertices,
   getLineDistanceToVertex,
@@ -31,8 +32,18 @@ import {
   removeFeatureVertex,
   updateFeatureVertex,
 } from "./editor-helpers";
-import { MapCanvas } from "./MapCanvas";
+import { MapCanvas, type MapCanvasLayerMouseEvent, type MapCanvasMarkerEvent } from "./MapCanvas";
 import type { EditorMode } from "./editor-types";
+import {
+  DEFAULT_MAP_SOURCE,
+  getInitialMapStyle,
+  getMapSourceOptions,
+  getMapSourceRequirement,
+  getMapStyleOptions,
+  resolveMapStyleUrl,
+  type EditorMapSource,
+  type EditorMapStyle,
+} from "./map-config";
 
 export function DatasetEditorPage() {
   const { datasetId = "" } = useParams();
@@ -54,6 +65,8 @@ export function DatasetEditorPage() {
     center: [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
     zoomLevel: FALLBACK_ZOOM,
   });
+  const [mapSource, setMapSource] = useState<EditorMapSource>(DEFAULT_MAP_SOURCE);
+  const [mapStyle, setMapStyle] = useState<EditorMapStyle>(getInitialMapStyle(DEFAULT_MAP_SOURCE));
 
   useEffect(() => {
     void loadDataset();
@@ -175,18 +188,11 @@ export function DatasetEditorPage() {
     applyHistorySnapshot(cloneFeatureCollection(next));
   }
 
-  function handleMapClick(event: Parameters<typeof MapCanvas>[0]["onMapClick"] extends (
-    event: infer T,
-  ) => void
-    ? T
-    : never) {
+  function handleMapClick(event: MapCanvasLayerMouseEvent) {
     const coordinate: LngLat = [event.lngLat.lng, event.lngLat.lat];
 
     if (mode === "select") {
-      const clickedFeatureId = event.features?.find(
-        (feature) => feature.properties && "featureId" in feature.properties,
-      )?.properties?.featureId;
-      setSelectedFeatureId(clickedFeatureId ? String(clickedFeatureId) : null);
+      setSelectedFeatureId(getClickedFeatureId(event));
       setSelectedVertexIndex(null);
       return;
     }
@@ -282,16 +288,19 @@ export function DatasetEditorPage() {
     setSelectedVertexIndex(segmentIndex + 1);
   }
 
-  function handleSelectVertex(event: Parameters<typeof MapCanvas>[0]["onSelectVertex"] extends (
-    event: infer E,
+  function handleSelectVertex(
+    event: MapCanvasMarkerEvent,
     featureId: string,
     vertexIndex: number,
-  ) => void
-    ? E
-    : never, featureId: string, vertexIndex: number) {
+  ) {
     event.originalEvent.stopPropagation();
     setSelectedFeatureId(featureId);
     setSelectedVertexIndex(vertexIndex);
+  }
+
+  function handleMapSourceChange(nextSource: EditorMapSource) {
+    setMapSource(nextSource);
+    setMapStyle(getInitialMapStyle(nextSource));
   }
 
   function handleDeleteSelectedVertex() {
@@ -396,6 +405,10 @@ export function DatasetEditorPage() {
     JSON.stringify(dataset.features) !== JSON.stringify(features) ||
     JSON.stringify(dataset.center) !== JSON.stringify(viewport.center) ||
     dataset.zoomLevel !== viewport.zoomLevel;
+  const mapSourceOptions = getMapSourceOptions();
+  const mapStyleOptions = getMapStyleOptions(mapSource);
+  const mapStyleUrl = resolveMapStyleUrl(mapSource, mapStyle);
+  const selectedMapSourceRequirement = getMapSourceRequirement(mapSource);
 
   function handleExportSelectedFeature() {
     if (!selectedFeature) {
@@ -493,14 +506,18 @@ export function DatasetEditorPage() {
         featureCount={features.features.length}
         importInputRef={importInputRef}
         isDirty={isDirty}
+        mapSource={mapSource}
+        mapSourceOptions={mapSourceOptions}
         mode={mode}
         onDeleteSelectedFeature={handleDeleteSelectedFeature}
         onExportSelectedFeature={handleExportSelectedFeature}
         onImportFileChange={handleImportGeoJson}
+        onMapSourceChange={handleMapSourceChange}
         onModeChange={handleModeChange}
         onOpenImport={() => importInputRef.current?.click()}
         onReset={handleResetDataset}
         onSave={() => void handleSaveDataset()}
+        selectedMapSourceRequirement={selectedMapSourceRequirement}
         selectedFeature={selectedFeature}
         selectedFeatureLength={selectedFeatureLength}
         selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
@@ -515,12 +532,17 @@ export function DatasetEditorPage() {
           hoverCoordinate={hoverCoordinate}
           isDraggingVertex={isDraggingVertex}
           isHoveringSelectableFeature={isHoveringSelectableFeature}
+          mapSource={mapSource}
+          mapStyle={mapStyle}
+          mapStyleUrl={mapStyleUrl}
+          mapStyleOptions={mapStyleOptions}
           mode={mode}
           onCloseDraftLineLoop={handleCloseDraftLineLoop}
           onFeatureClick={setSelectedFeatureId}
           onFinalizeDraft={finalizeDraft}
           onMapClick={handleMapClick}
           onMapHover={setHoverCoordinate}
+          onMapStyleChange={setMapStyle}
           onInsertVertex={handleInsertVertex}
           onSelectVertex={handleSelectVertex}
           onVertexDrag={handleVertexDrag}

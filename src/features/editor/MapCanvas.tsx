@@ -1,16 +1,34 @@
+import {
+  IconLeaf,
+  IconMap,
+  IconMoon,
+  IconMountain,
+  IconSatellite,
+  IconSun,
+} from "@tabler/icons-react";
 import { useEffect, useRef } from "react";
-import Map, {
-  Layer,
-  Marker,
-  NavigationControl,
-  Source,
-  type LayerProps,
-  type MapLayerMouseEvent,
-  type MapRef,
-  type MarkerEvent,
-  type ViewStateChangeEvent,
+import MapboxMap, {
+  Layer as MapboxLayer,
+  Marker as MapboxMarker,
+  NavigationControl as MapboxNavigationControl,
+  Source as MapboxSource,
+  type LayerProps as MapboxLayerProps,
+  type MapMouseEvent as MapboxLayerMouseEvent,
+  type MapRef as MapboxMapRef,
+  type MarkerEvent as MapboxMarkerEvent,
+} from "react-map-gl/mapbox";
+import MapLibreMap, {
+  Layer as MapLibreLayer,
+  Marker as MapLibreMarker,
+  NavigationControl as MapLibreNavigationControl,
+  Source as MapLibreSource,
+  type LayerProps as MapLibreLayerProps,
+  type MapLayerMouseEvent as MapLibreLayerMouseEvent,
+  type MapRef as MapLibreMapRef,
+  type MarkerEvent as MapLibreMarkerEvent,
 } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
+import { Button } from "@/components/Button";
 import type { DatasetFeatureCollection, LngLat } from "@/types/dataset";
 import {
   buildDraftFeatures,
@@ -19,6 +37,12 @@ import {
   getMapCursor,
 } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
+import {
+  getMapboxAccessToken,
+  getMapRenderer,
+  type EditorMapSource,
+  type EditorMapStyle,
+} from "./map-config";
 
 const FEATURE_SOURCE_ID = "dataset-features";
 const DRAFT_SOURCE_ID = "draft-features";
@@ -44,28 +68,39 @@ const INTERACTIVE_LAYER_IDS = [
   SELECTED_POINT_LAYER_ID,
 ];
 
-const FEATURE_FILL_LAYER: LayerProps = {
+const MAP_STYLE_ICON_MAP = {
+  default: IconMap,
+  satellite: IconSatellite,
+  terrain: IconMountain,
+  dark: IconMoon,
+  nature: IconLeaf,
+  light: IconSun,
+} as const;
+
+type SharedLayerProps = MapboxLayerProps | MapLibreLayerProps;
+
+const FEATURE_FILL_LAYER: SharedLayerProps = {
   id: FEATURE_FILL_LAYER_ID,
   type: "fill",
   filter: ["all", ["==", ["geometry-type"], "Polygon"], ["!=", ["get", "isSelected"], true]],
   paint: { "fill-color": "#0ea5e9", "fill-opacity": 0.18 },
 };
 
-const FEATURE_LINE_HIT_LAYER: LayerProps = {
+const FEATURE_LINE_HIT_LAYER: SharedLayerProps = {
   id: FEATURE_LINE_HIT_LAYER_ID,
   type: "line",
   filter: ["all", ["==", ["geometry-type"], "LineString"], ["!=", ["get", "isSelected"], true]],
   paint: { "line-color": "#000000", "line-opacity": 0.01, "line-width": 14 },
 };
 
-const FEATURE_LINE_LAYER: LayerProps = {
+const FEATURE_LINE_LAYER: SharedLayerProps = {
   id: FEATURE_LINE_LAYER_ID,
   type: "line",
   filter: ["all", ["==", ["geometry-type"], "LineString"], ["!=", ["get", "isSelected"], true]],
   paint: { "line-color": "#0284c7", "line-width": 2 },
 };
 
-const FEATURE_POINT_LAYER: LayerProps = {
+const FEATURE_POINT_LAYER: SharedLayerProps = {
   id: FEATURE_POINT_LAYER_ID,
   type: "circle",
   filter: ["all", ["==", ["geometry-type"], "Point"], ["!=", ["get", "isSelected"], true]],
@@ -77,14 +112,14 @@ const FEATURE_POINT_LAYER: LayerProps = {
   },
 };
 
-const SELECTED_FILL_LAYER: LayerProps = {
+const SELECTED_FILL_LAYER: SharedLayerProps = {
   id: SELECTED_FILL_LAYER_ID,
   type: "fill",
   filter: ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "isSelected"], true]],
   paint: { "fill-color": "#f97316", "fill-opacity": 0.18 },
 };
 
-const SELECTED_LINE_HIT_LAYER: LayerProps = {
+const SELECTED_LINE_HIT_LAYER: SharedLayerProps = {
   id: SELECTED_LINE_HIT_LAYER_ID,
   type: "line",
   filter: [
@@ -95,7 +130,7 @@ const SELECTED_LINE_HIT_LAYER: LayerProps = {
   paint: { "line-color": "#000000", "line-opacity": 0.01, "line-width": 16 },
 };
 
-const SELECTED_LINE_LAYER: LayerProps = {
+const SELECTED_LINE_LAYER: SharedLayerProps = {
   id: SELECTED_LINE_LAYER_ID,
   type: "line",
   filter: [
@@ -106,7 +141,7 @@ const SELECTED_LINE_LAYER: LayerProps = {
   paint: { "line-color": "#f97316", "line-width": 3 },
 };
 
-const SELECTED_POINT_LAYER: LayerProps = {
+const SELECTED_POINT_LAYER: SharedLayerProps = {
   id: SELECTED_POINT_LAYER_ID,
   type: "circle",
   filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "isSelected"], true]],
@@ -118,14 +153,14 @@ const SELECTED_POINT_LAYER: LayerProps = {
   },
 };
 
-const DRAFT_FILL_LAYER: LayerProps = {
+const DRAFT_FILL_LAYER: SharedLayerProps = {
   id: DRAFT_FILL_LAYER_ID,
   type: "fill",
   filter: ["==", ["geometry-type"], "Polygon"],
   paint: { "fill-color": "#f59e0b", "fill-opacity": 0.14 },
 };
 
-const DRAFT_LINE_LAYER: LayerProps = {
+const DRAFT_LINE_LAYER: SharedLayerProps = {
   id: DRAFT_LINE_LAYER_ID,
   type: "line",
   filter: ["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]],
@@ -136,7 +171,7 @@ const DRAFT_LINE_LAYER: LayerProps = {
   },
 };
 
-const DRAFT_POINT_LAYER: LayerProps = {
+const DRAFT_POINT_LAYER: SharedLayerProps = {
   id: DRAFT_POINT_LAYER_ID,
   type: "circle",
   filter: ["==", ["geometry-type"], "Point"],
@@ -148,20 +183,30 @@ const DRAFT_POINT_LAYER: LayerProps = {
   },
 };
 
+export type MapCanvasLayerMouseEvent = MapboxLayerMouseEvent | MapLibreLayerMouseEvent;
+export type MapCanvasMarkerEvent =
+  | MapboxMarkerEvent<MouseEvent>
+  | MapLibreMarkerEvent<MouseEvent>;
+
 type MapCanvasProps = {
   draftCoordinates: LngLat[];
   features: DatasetFeatureCollection;
   hoverCoordinate: LngLat | null;
   isDraggingVertex: boolean;
   isHoveringSelectableFeature: boolean;
+  mapSource: EditorMapSource;
+  mapStyle: EditorMapStyle;
+  mapStyleUrl: string;
+  mapStyleOptions: Array<{ value: string; label: string }>;
   mode: EditorMode;
   onCloseDraftLineLoop: () => void;
   onFeatureClick: (featureId: string | null) => void;
   onFinalizeDraft: () => void;
-  onMapClick: (event: MapLayerMouseEvent) => void;
+  onMapClick: (event: MapCanvasLayerMouseEvent) => void;
   onMapHover: (coordinate: LngLat | null) => void;
+  onMapStyleChange: (style: EditorMapStyle) => void;
   onInsertVertex: (featureId: string, segmentIndex: number) => void;
-  onSelectVertex: (event: MarkerEvent<MouseEvent>, featureId: string, vertexIndex: number) => void;
+  onSelectVertex: (event: MapCanvasMarkerEvent, featureId: string, vertexIndex: number) => void;
   onVertexDrag: (featureId: string, vertexIndex: number, coordinate: LngLat) => void;
   onVertexDragEnd: (featureId: string, vertexIndex: number, coordinate: LngLat) => void;
   onVertexDragStart: () => void;
@@ -182,12 +227,17 @@ export function MapCanvas({
   hoverCoordinate,
   isDraggingVertex,
   isHoveringSelectableFeature,
+  mapSource,
+  mapStyle,
+  mapStyleUrl,
+  mapStyleOptions,
   mode,
   onCloseDraftLineLoop,
   onFeatureClick,
   onFinalizeDraft,
   onMapClick,
   onMapHover,
+  onMapStyleChange,
   onInsertVertex,
   onSelectVertex,
   onVertexDrag,
@@ -203,13 +253,12 @@ export function MapCanvas({
   viewport,
   onViewportChange,
 }: MapCanvasProps) {
-  const mapRef = useRef<MapRef | null>(null);
-  const mapLibreStyleUrl =
-    import.meta.env.VITE_MAPLIBRE_STYLE_URL || "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+  const mapRef = useRef<MapboxMapRef | MapLibreMapRef | null>(null);
   const center = viewport.center;
   const zoom = viewport.zoomLevel;
   const renderedFeatures = buildRenderableFeatures(features, selectedFeatureId);
   const draftFeatures = buildDraftFeatures(mode, draftCoordinates, hoverCoordinate);
+  const isMapbox = getMapRenderer(mapSource) === "mapbox";
 
   useEffect(() => {
     if (!pendingFitBounds || !mapRef.current) {
@@ -223,95 +272,109 @@ export function MapCanvas({
     setPendingFitBounds(null);
   }, [pendingFitBounds, setPendingFitBounds]);
 
+  const MapComponent: any = isMapbox ? MapboxMap : MapLibreMap;
+  const LayerComponent: any = isMapbox ? MapboxLayer : MapLibreLayer;
+  const MarkerComponent: any = isMapbox ? MapboxMarker : MapLibreMarker;
+  const NavigationControlComponent: any = isMapbox
+    ? MapboxNavigationControl
+    : MapLibreNavigationControl;
+  const SourceComponent: any = isMapbox ? MapboxSource : MapLibreSource;
+  const mapProps: Record<string, unknown> = {
+    ref: mapRef,
+    latitude: center[1],
+    longitude: center[0],
+    zoom,
+    mapStyle: mapStyleUrl,
+    cursor: getMapCursor(mode, isDraggingVertex, isHoveringSelectableFeature),
+    doubleClickZoom: true,
+    dragPan: !isDraggingVertex,
+    interactiveLayerIds: INTERACTIVE_LAYER_IDS,
+    onClick: (event: MapCanvasLayerMouseEvent) => {
+      onMapClick(event);
+      if (mode === "select" && !getClickedFeatureId(event)) {
+        onFeatureClick(null);
+      }
+    },
+    onDblClick: (event: MapCanvasLayerMouseEvent) => {
+      const clickedFeatureId = getClickedFeatureId(event);
+
+      if (mode === "draw-line" || mode === "draw-polygon") {
+        event.preventDefault();
+        event.originalEvent.preventDefault();
+        onFinalizeDraft();
+        return;
+      }
+
+      if (clickedFeatureId) {
+        event.preventDefault();
+        event.originalEvent.preventDefault();
+      }
+    },
+    onMouseMove: (event: MapCanvasLayerMouseEvent) => {
+      if (mode === "select") {
+        setIsHoveringSelectableFeature(Boolean(getClickedFeatureId(event)));
+        return;
+      }
+
+      if (mode !== "draw-line" && mode !== "draw-polygon") {
+        return;
+      }
+
+      onMapHover([event.lngLat.lng, event.lngLat.lat]);
+    },
+    onMouseLeave: () => {
+      onMapHover(null);
+      setIsHoveringSelectableFeature(false);
+    },
+    onMove: (event: { viewState: { longitude: number; latitude: number; zoom: number } }) => {
+      onViewportChange({
+        center: [event.viewState.longitude, event.viewState.latitude],
+        zoomLevel: event.viewState.zoom,
+      });
+    },
+    style: { width: "100%", height: "100%" },
+  };
+
+  if (isMapbox) {
+    mapProps.mapboxAccessToken = getMapboxAccessToken();
+  } else {
+    mapProps.mapLib = maplibregl;
+  }
+
   return (
-    <div className="h-full min-h-screen">
-      <Map
-        ref={mapRef}
-        latitude={center[1]}
-        mapLib={maplibregl}
-        mapStyle={mapLibreStyleUrl}
-        longitude={center[0]}
-        cursor={getMapCursor(mode, isDraggingVertex, isHoveringSelectableFeature)}
-        doubleClickZoom
-        dragPan={!isDraggingVertex}
-        interactiveLayerIds={INTERACTIVE_LAYER_IDS}
-        onClick={(event) => {
-          onMapClick(event);
-          if (mode === "select" && !getClickedFeatureId(event)) {
-            onFeatureClick(null);
-          }
-        }}
-        onDblClick={(event) => {
-          const clickedFeatureId = getClickedFeatureId(event);
-
-          if (mode === "draw-line" || mode === "draw-polygon") {
-            event.preventDefault();
-            event.originalEvent.preventDefault();
-            onFinalizeDraft();
-            return;
-          }
-
-          if (clickedFeatureId) {
-            event.preventDefault();
-            event.originalEvent.preventDefault();
-          }
-        }}
-        onMouseMove={(event) => {
-          if (mode === "select") {
-            setIsHoveringSelectableFeature(Boolean(getClickedFeatureId(event)));
-            return;
-          }
-
-          if (mode !== "draw-line" && mode !== "draw-polygon") {
-            return;
-          }
-
-          onMapHover([event.lngLat.lng, event.lngLat.lat]);
-        }}
-        onMouseLeave={() => {
-          onMapHover(null);
-          setIsHoveringSelectableFeature(false);
-        }}
-        onMove={(event: ViewStateChangeEvent) => {
-          onViewportChange({
-            center: [event.viewState.longitude, event.viewState.latitude],
-            zoomLevel: event.viewState.zoom,
-          });
-        }}
-        style={{ width: "100%", height: "100%" }}
-        zoom={zoom}
-      >
-        <Source data={renderedFeatures} id={FEATURE_SOURCE_ID} type="geojson">
-          <Layer {...FEATURE_LINE_HIT_LAYER} />
-          <Layer {...FEATURE_FILL_LAYER} />
-          <Layer {...FEATURE_LINE_LAYER} />
-          <Layer {...FEATURE_POINT_LAYER} />
-          <Layer {...SELECTED_FILL_LAYER} />
-          <Layer {...SELECTED_LINE_HIT_LAYER} />
-          <Layer {...SELECTED_LINE_LAYER} />
-          <Layer {...SELECTED_POINT_LAYER} />
-        </Source>
-        <Source data={draftFeatures} id={DRAFT_SOURCE_ID} type="geojson">
-          <Layer {...DRAFT_FILL_LAYER} />
-          <Layer {...DRAFT_LINE_LAYER} />
-          <Layer {...DRAFT_POINT_LAYER} />
-        </Source>
+    <div className="relative h-full min-h-screen">
+      <MapComponent {...mapProps}>
+        <SourceComponent data={renderedFeatures} id={FEATURE_SOURCE_ID} type="geojson">
+          <LayerComponent {...FEATURE_LINE_HIT_LAYER} />
+          <LayerComponent {...FEATURE_FILL_LAYER} />
+          <LayerComponent {...FEATURE_LINE_LAYER} />
+          <LayerComponent {...FEATURE_POINT_LAYER} />
+          <LayerComponent {...SELECTED_FILL_LAYER} />
+          <LayerComponent {...SELECTED_LINE_HIT_LAYER} />
+          <LayerComponent {...SELECTED_LINE_LAYER} />
+          <LayerComponent {...SELECTED_POINT_LAYER} />
+        </SourceComponent>
+        <SourceComponent data={draftFeatures} id={DRAFT_SOURCE_ID} type="geojson">
+          <LayerComponent {...DRAFT_FILL_LAYER} />
+          <LayerComponent {...DRAFT_LINE_LAYER} />
+          <LayerComponent {...DRAFT_POINT_LAYER} />
+        </SourceComponent>
         {mode === "draw-line" && draftCoordinates.length >= 2 ? (
-          <Marker
+          <MarkerComponent
             latitude={draftCoordinates[0][1]}
             longitude={draftCoordinates[0][0]}
-            onClick={(event) => {
+            onClick={(event: MapCanvasMarkerEvent) => {
               event.originalEvent.stopPropagation();
               onCloseDraftLineLoop();
             }}
           >
             <div className="h-3 w-3 rounded-full border border-amber-500 bg-amber-200 shadow-sm" />
-          </Marker>
+          </MarkerComponent>
         ) : null}
         {mode === "select" && selectedFeatureId ? (
           <>
             {selectedMidpoints.map((midpoint) => (
-              <Marker
+              <MarkerComponent
                 key={`${selectedFeatureId}-midpoint-${midpoint.segmentIndex}`}
                 latitude={midpoint.coordinate[1]}
                 longitude={midpoint.coordinate[0]}
@@ -321,20 +384,20 @@ export function MapCanvas({
                   className="h-[7px] w-[7px] rounded-full border border-orange-400 bg-orange-400/45 shadow-sm backdrop-blur-[1px]"
                   onDoubleClick={(event) => event.stopPropagation()}
                 />
-              </Marker>
+              </MarkerComponent>
             ))}
             {selectedVertices.map((vertex, index) => (
-              <Marker
+              <MarkerComponent
                 draggable
                 key={`${selectedFeatureId}-${index}`}
                 latitude={vertex[1]}
                 longitude={vertex[0]}
-                onClick={(event) => onSelectVertex(event, selectedFeatureId, index)}
+                onClick={(event: MapCanvasMarkerEvent) => onSelectVertex(event, selectedFeatureId, index)}
                 onDragStart={onVertexDragStart}
-                onDrag={(event) => {
+                onDrag={(event: { lngLat: { lng: number; lat: number } }) => {
                   onVertexDrag(selectedFeatureId, index, [event.lngLat.lng, event.lngLat.lat]);
                 }}
-                onDragEnd={(event) => {
+                onDragEnd={(event: { lngLat: { lng: number; lat: number } }) => {
                   onVertexDragEnd(selectedFeatureId, index, [event.lngLat.lng, event.lngLat.lat]);
                 }}
               >
@@ -346,12 +409,33 @@ export function MapCanvas({
                   }
                   onDoubleClick={(event) => event.stopPropagation()}
                 />
-              </Marker>
+              </MarkerComponent>
             ))}
           </>
         ) : null}
-        <NavigationControl position="top-right" />
-      </Map>
+        <NavigationControlComponent position="top-right" />
+      </MapComponent>
+      <div className="pointer-events-none absolute left-3 top-2 z-10">
+        <div className="pointer-events-auto flex items-center rounded-xl shadow-lg">
+          {mapStyleOptions.map((option) => {
+            const Icon = MAP_STYLE_ICON_MAP[option.value as keyof typeof MAP_STYLE_ICON_MAP] ?? IconMap;
+
+            return (
+              <Button
+                className={
+                  `${mapStyle === option.value ? "bg-slate-300" : "bg-white"} h-8 min-w-8 rounded-none border-y-2 border-l-2 border-slate-500/20 px-1.5 text-slate-900 shadow-none first:rounded-l-xl last:rounded-r-xl last:border-r-2 hover:bg-slate-100`
+                }
+                key={option.value}
+                onClick={() => onMapStyleChange(option.value as EditorMapStyle)}
+                title={option.label}
+                variant="ghost"
+              >
+                <Icon size={18} stroke={1.9} />
+              </Button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
