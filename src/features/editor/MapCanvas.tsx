@@ -286,13 +286,10 @@ export function MapCanvas({
     latitude: center[1],
     longitude: center[0],
     zoom,
-    bearing: mapState.isBearingEnabled ? undefined : 0,
-    pitch: mapState.isPitchEnabled ? undefined : 0,
     mapStyle: mapState.mapStyleUrl,
     cursor: getMapCursor(mode, isDraggingVertex, isHoveringSelectableFeature),
     doubleClickZoom: true,
     dragPan: !isDraggingVertex,
-    dragRotate: mapState.isBearingEnabled || mapState.isPitchEnabled,
     interactiveLayerIds: INTERACTIVE_LAYER_IDS,
     onClick: (event: MapCanvasLayerMouseEvent) => {
       onMapClick(event);
@@ -337,9 +334,22 @@ export function MapCanvas({
         zoomLevel: event.viewState.zoom,
       });
     },
-    pitchWithRotate: mapState.isPitchEnabled,
     style: { width: "100%", height: "100%" },
   };
+
+  if (isMapbox) {
+    Object.assign(mapProps, {
+      bearing: mapState.isBearingEnabled ? undefined : 0,
+      pitch: mapState.isPitchEnabled ? undefined : 0,
+      dragRotate: mapState.isBearingEnabled || mapState.isPitchEnabled,
+      pitchWithRotate: mapState.isPitchEnabled,
+    });
+  } else {
+    Object.assign(mapProps, {
+      dragRotate: false,
+      pitchWithRotate: false,
+    });
+  }
 
   if (isMapbox) {
     mapProps.mapboxAccessToken = getMapboxAccessToken();

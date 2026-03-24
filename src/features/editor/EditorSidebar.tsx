@@ -2,7 +2,6 @@ import {
   IconChevronLeft,
   IconPoint,
   IconPointer,
-  IconX,
   IconVectorSpline,
   IconVectorTriangle,
   IconLayoutSidebarLeftExpand,
@@ -18,6 +17,7 @@ import type { DatasetGeometry } from "@/types/dataset";
 import { getModeDescription } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
 import type { EditorMapActions, EditorMapState } from "./useEditorMapState";
+import { MapSettingsModal } from "./MapSettingsModal";
 
 type EditorSidebarProps = {
   datasetName: string;
@@ -241,72 +241,12 @@ export function EditorSidebar({
         </div>
       )}
 
-      {isMapSettingsOpen ? (
-        <div
-          aria-hidden="true"
-          className="fixed inset-0 z-40 bg-slate-950/10 backdrop-blur-[1px]"
-          onClick={() => setIsMapSettingsOpen(false)}
-        >
-          <div
-            aria-modal="true"
-            className="absolute left-1/2 top-24 z-50 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-[28px] border border-sky-100 bg-white/80 p-5 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-lg font-semibold text-slate-950">Map Settings</p>
-                <p className="mt-1 text-sm text-slate-500">Choose the renderer source.</p>
-              </div>
-              <Button
-                aria-label="Close map settings"
-                className="h-10 w-10 rounded-full px-0"
-                onClick={() => setIsMapSettingsOpen(false)}
-                variant="ghost"
-              >
-                <IconX size={18} stroke={1.9} />
-              </Button>
-            </div>
-            <div className="mt-5 space-y-4">
-              <div>
-                <p className="mb-2 text-sm font-medium text-slate-700">Map Source</p>
-                <Select
-                  onChange={(event) => mapActions.setMapSource(event.target.value as typeof mapState.mapSource)}
-                  value={mapState.mapSource}
-                >
-                  {mapState.mapSourceOptions.map((option) => (
-                    <option disabled={!option.isAvailable} key={option.value} value={option.value}>
-                      {option.label}
-                      {option.isAvailable ? "" : " (requires key)"}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <p className="mb-2 text-sm font-medium text-slate-700">Interaction</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <ToggleButton
-                    active={mapState.isBearingEnabled}
-                    label="Bearing"
-                    onClick={() => mapActions.setBearingEnabled(!mapState.isBearingEnabled)}
-                  />
-                  <ToggleButton
-                    active={mapState.isPitchEnabled}
-                    label="Pitch"
-                    onClick={() => mapActions.setPitchEnabled(!mapState.isPitchEnabled)}
-                  />
-                </div>
-              </div>
-
-              {mapState.selectedMapSourceRequirement ? (
-                <p className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs text-slate-600">
-                  This source uses <code>{mapState.selectedMapSourceRequirement}</code>.
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <MapSettingsModal
+        isOpen={isMapSettingsOpen}
+        mapActions={mapActions}
+        mapState={mapState}
+        onClose={() => setIsMapSettingsOpen(false)}
+      />
     </aside>
   );
 }
@@ -389,29 +329,6 @@ function ModeButton({
       variant={active ? "primary" : "secondary"}
     >
       <Icon size={20} stroke={1.9} />
-    </Button>
-  );
-}
-
-function ToggleButton({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      aria-pressed={active}
-      className="justify-between rounded-2xl px-4 py-3"
-      onClick={onClick}
-      type="button"
-      variant={active ? "primary" : "secondary"}
-    >
-      <span>{label}</span>
-      <span className="text-xs uppercase tracking-[0.16em]">{active ? "On" : "Off"}</span>
     </Button>
   );
 }
