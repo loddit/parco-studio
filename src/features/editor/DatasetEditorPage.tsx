@@ -34,16 +34,7 @@ import {
 } from "./editor-helpers";
 import type { MapCanvasLayerMouseEvent, MapCanvasMarkerEvent } from "./MapCanvas";
 import type { EditorMode } from "./editor-types";
-import {
-  DEFAULT_MAP_SOURCE,
-  getInitialMapStyle,
-  getMapSourceOptions,
-  getMapSourceRequirement,
-  getMapStyleOptions,
-  resolveMapStyleUrl,
-  type EditorMapSource,
-  type EditorMapStyle,
-} from "./map-config";
+import { useEditorMapState } from "./useEditorMapState";
 
 const MapCanvas = lazy(() =>
   import("./MapCanvas").then((module) => ({
@@ -57,6 +48,12 @@ export function DatasetEditorPage() {
   const undoStackRef = useRef<DatasetFeatureCollection[]>([]);
   const redoStackRef = useRef<DatasetFeatureCollection[]>([]);
   const dragStartFeaturesRef = useRef<DatasetFeatureCollection | null>(null);
+  const { mapState, mapActions } = useEditorMapState({
+    initialViewport: {
+      center: [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
+      zoomLevel: FALLBACK_ZOOM,
+    },
+  });
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [mode, setMode] = useState<EditorMode>("select");
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
@@ -66,13 +63,6 @@ export function DatasetEditorPage() {
   const [isHoveringSelectableFeature, setIsHoveringSelectableFeature] = useState(false);
   const [features, setFeatures] = useState<DatasetFeatureCollection>(createEmptyFeatureCollection());
   const [isDraggingVertex, setIsDraggingVertex] = useState(false);
-  const [pendingFitBounds, setPendingFitBounds] = useState<[LngLat, LngLat] | null>(null);
-  const [viewport, setViewport] = useState<{ center: LngLat; zoomLevel: number }>({
-    center: [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
-    zoomLevel: FALLBACK_ZOOM,
-  });
-  const [mapSource, setMapSource] = useState<EditorMapSource>(DEFAULT_MAP_SOURCE);
-  const [mapStyle, setMapStyle] = useState<EditorMapStyle>(getInitialMapStyle(DEFAULT_MAP_SOURCE));
 
   function resetSelectionState() {
     setSelectedFeatureId(null);
@@ -108,7 +98,7 @@ export function DatasetEditorPage() {
     redoStackRef.current = [];
     dragStartFeaturesRef.current = null;
     resetTransientEditorState();
-    setViewport({
+    mapActions.setViewport({
       center: nextDataset.center ?? [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
       zoomLevel: nextDataset.zoomLevel ?? FALLBACK_ZOOM,
     });
@@ -121,8 +111,8 @@ export function DatasetEditorPage() {
 
     const nextDataset = await saveDatasetState(
       dataset.id,
-      viewport.center,
-      viewport.zoomLevel,
+      mapState.viewport.center,
+      mapState.viewport.zoomLevel,
       features,
     );
     setDataset(nextDataset);
@@ -138,7 +128,7 @@ export function DatasetEditorPage() {
     redoStackRef.current = [];
     dragStartFeaturesRef.current = null;
     resetTransientEditorState();
-    setViewport({
+    mapActions.setViewport({
       center: dataset.center ?? [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
       zoomLevel: dataset.zoomLevel ?? FALLBACK_ZOOM,
     });
@@ -299,11 +289,6 @@ export function DatasetEditorPage() {
     setSelectedVertexIndex(vertexIndex);
   }
 
-  function handleMapSourceChange(nextSource: EditorMapSource) {
-    setMapSource(nextSource);
-    setMapStyle(getInitialMapStyle(nextSource));
-  }
-
   function handleDeleteSelectedVertex() {
     if (!selectedFeatureId || selectedVertexIndex === null) {
       return;
@@ -369,7 +354,7 @@ export function DatasetEditorPage() {
         features: [...features.features, ...importedFeatures],
       });
       resetTransientEditorState();
-      setPendingFitBounds(getFeatureBounds(importedFeatures));
+      mapActions.setPendingFitBounds(getFeatureBounds(importedFeatures));
     } catch {
       window.alert("Failed to import GeoJSON. Check that the file contains valid JSON.");
     } finally {
@@ -400,12 +385,8 @@ export function DatasetEditorPage() {
   const isDirty =
     !dataset ||
     JSON.stringify(dataset.features) !== JSON.stringify(features) ||
-    JSON.stringify(dataset.center) !== JSON.stringify(viewport.center) ||
-    dataset.zoomLevel !== viewport.zoomLevel;
-  const mapSourceOptions = getMapSourceOptions();
-  const mapStyleOptions = getMapStyleOptions(mapSource);
-  const mapStyleUrl = resolveMapStyleUrl(mapSource, mapStyle);
-  const selectedMapSourceRequirement = getMapSourceRequirement(mapSource);
+    JSON.stringify(dataset.center) !== JSON.stringify(mapState.viewport.center) ||
+    dataset.zoomLevel !== mapState.viewport.zoomLevel;
 
   function handleExportSelectedFeature() {
     if (!selectedFeature) {
@@ -506,18 +487,16 @@ export function DatasetEditorPage() {
         featureCount={features.features.length}
         importInputRef={importInputRef}
         isDirty={isDirty}
-        mapSource={mapSource}
-        mapSourceOptions={mapSourceOptions}
+        mapActions={mapActions}
+        mapState={mapState}
         mode={mode}
         onDeleteSelectedFeature={handleDeleteSelectedFeature}
         onExportSelectedFeature={handleExportSelectedFeature}
         onImportFileChange={handleImportGeoJson}
-        onMapSourceChange={handleMapSourceChange}
         onModeChange={handleModeChange}
         onOpenImport={() => importInputRef.current?.click()}
         onReset={handleResetDataset}
         onSave={() => void handleSaveDataset()}
-        selectedMapSourceRequirement={selectedMapSourceRequirement}
         selectedFeature={selectedFeature}
         selectedFeatureLength={selectedFeatureLength}
         selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
@@ -541,31 +520,24 @@ export function DatasetEditorPage() {
             hoverCoordinate={hoverCoordinate}
             isDraggingVertex={isDraggingVertex}
             isHoveringSelectableFeature={isHoveringSelectableFeature}
-            mapSource={mapSource}
-            mapStyle={mapStyle}
-            mapStyleUrl={mapStyleUrl}
-            mapStyleOptions={mapStyleOptions}
+            mapActions={mapActions}
+            mapState={mapState}
             mode={mode}
             onCloseDraftLineLoop={handleCloseDraftLineLoop}
             onFeatureClick={setSelectedFeatureId}
             onFinalizeDraft={finalizeDraft}
             onMapClick={handleMapClick}
             onMapHover={setHoverCoordinate}
-            onMapStyleChange={setMapStyle}
             onInsertVertex={handleInsertVertex}
             onSelectVertex={handleSelectVertex}
             onVertexDrag={handleVertexDrag}
             onVertexDragEnd={handleVertexDragEnd}
             onVertexDragStart={handleVertexDragStart}
-            pendingFitBounds={pendingFitBounds}
             selectedFeatureId={selectedFeatureId}
             selectedMidpoints={selectedMidpoints}
             selectedVertexIndex={selectedVertexIndex}
             selectedVertices={selectedVertices}
             setIsHoveringSelectableFeature={setIsHoveringSelectableFeature}
-            setPendingFitBounds={setPendingFitBounds}
-            viewport={viewport}
-            onViewportChange={setViewport}
           />
         </Suspense>
       </section>

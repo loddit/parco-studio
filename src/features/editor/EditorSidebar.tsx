@@ -14,7 +14,7 @@ import type { Feature, LineString } from "geojson";
 import type { DatasetGeometry } from "@/types/dataset";
 import { getModeDescription } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
-import type { EditorMapSource } from "./map-config";
+import type { EditorMapActions, EditorMapState } from "./useEditorMapState";
 
 type EditorSidebarProps = {
   datasetName: string;
@@ -22,18 +22,23 @@ type EditorSidebarProps = {
   featureCount: number;
   importInputRef: React.RefObject<HTMLInputElement | null>;
   isDirty: boolean;
-  mapSource: EditorMapSource;
-  mapSourceOptions: Array<{ value: EditorMapSource; label: string; isAvailable: boolean }>;
+  mapActions: Pick<EditorMapActions, "setBearingEnabled" | "setMapSource" | "setPitchEnabled">;
+  mapState: Pick<
+    EditorMapState,
+    | "isBearingEnabled"
+    | "isPitchEnabled"
+    | "mapSource"
+    | "mapSourceOptions"
+    | "selectedMapSourceRequirement"
+  >;
   mode: EditorMode;
   onDeleteSelectedFeature: () => void;
   onExportSelectedFeature: () => void;
   onImportFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onMapSourceChange: (source: EditorMapSource) => void;
   onModeChange: (mode: EditorMode) => void;
   onOpenImport: () => void;
   onReset: () => void;
   onSave: () => void;
-  selectedMapSourceRequirement: string | null;
   selectedFeature: Feature<DatasetGeometry> | null;
   selectedFeatureLength: string | null;
   selectedVertexDistanceFromStart: string | null;
@@ -47,18 +52,16 @@ export function EditorSidebar({
   featureCount,
   importInputRef,
   isDirty,
-  mapSource,
-  mapSourceOptions,
+  mapActions,
+  mapState,
   mode,
   onDeleteSelectedFeature,
   onExportSelectedFeature,
   onImportFileChange,
-  onMapSourceChange,
   onModeChange,
   onOpenImport,
   onReset,
   onSave,
-  selectedMapSourceRequirement,
   selectedFeature,
   selectedFeatureLength,
   selectedVertexDistanceFromStart,
@@ -206,10 +209,10 @@ export function EditorSidebar({
               <div>
                 <p className="mb-2 text-sm font-medium text-slate-700">Map Source</p>
                 <Select
-                  onChange={(event) => onMapSourceChange(event.target.value as EditorMapSource)}
-                  value={mapSource}
+                  onChange={(event) => mapActions.setMapSource(event.target.value as typeof mapState.mapSource)}
+                  value={mapState.mapSource}
                 >
-                  {mapSourceOptions.map((option) => (
+                  {mapState.mapSourceOptions.map((option) => (
                     <option disabled={!option.isAvailable} key={option.value} value={option.value}>
                       {option.label}
                       {option.isAvailable ? "" : " (requires key)"}
@@ -217,10 +220,25 @@ export function EditorSidebar({
                   ))}
                 </Select>
               </div>
+              <div>
+                <p className="mb-2 text-sm font-medium text-slate-700">Interaction</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <ToggleButton
+                    active={mapState.isBearingEnabled}
+                    label="Bearing"
+                    onClick={() => mapActions.setBearingEnabled(!mapState.isBearingEnabled)}
+                  />
+                  <ToggleButton
+                    active={mapState.isPitchEnabled}
+                    label="Pitch"
+                    onClick={() => mapActions.setPitchEnabled(!mapState.isPitchEnabled)}
+                  />
+                </div>
+              </div>
 
-              {selectedMapSourceRequirement ? (
+              {mapState.selectedMapSourceRequirement ? (
                 <p className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs text-slate-600">
-                  This source uses <code>{selectedMapSourceRequirement}</code>.
+                  This source uses <code>{mapState.selectedMapSourceRequirement}</code>.
                 </p>
               ) : null}
             </div>
@@ -296,6 +314,29 @@ function ModeButton({
       variant={active ? "primary" : "secondary"}
     >
       <Icon size={20} stroke={1.9} />
+    </Button>
+  );
+}
+
+function ToggleButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      aria-pressed={active}
+      className="justify-between rounded-2xl px-4 py-3"
+      onClick={onClick}
+      type="button"
+      variant={active ? "primary" : "secondary"}
+    >
+      <span>{label}</span>
+      <span className="text-xs uppercase tracking-[0.16em]">{active ? "On" : "Off"}</span>
     </Button>
   );
 }

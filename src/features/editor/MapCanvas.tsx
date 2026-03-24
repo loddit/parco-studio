@@ -40,9 +40,9 @@ import type { EditorMode } from "./editor-types";
 import {
   getMapboxAccessToken,
   getMapRenderer,
-  type EditorMapSource,
   type EditorMapStyle,
 } from "./map-config";
+import type { EditorMapActions, EditorMapState } from "./useEditorMapState";
 
 const FEATURE_SOURCE_ID = "dataset-features";
 const DRAFT_SOURCE_ID = "draft-features";
@@ -194,31 +194,34 @@ type MapCanvasProps = {
   hoverCoordinate: LngLat | null;
   isDraggingVertex: boolean;
   isHoveringSelectableFeature: boolean;
-  mapSource: EditorMapSource;
-  mapStyle: EditorMapStyle;
-  mapStyleUrl: string;
-  mapStyleOptions: Array<{ value: string; label: string }>;
+  mapActions: Pick<EditorMapActions, "setMapStyle" | "setPendingFitBounds" | "setViewport">;
+  mapState: Pick<
+    EditorMapState,
+    | "isBearingEnabled"
+    | "isPitchEnabled"
+    | "mapSource"
+    | "mapStyle"
+    | "mapStyleOptions"
+    | "mapStyleUrl"
+    | "pendingFitBounds"
+    | "viewport"
+  >;
   mode: EditorMode;
   onCloseDraftLineLoop: () => void;
   onFeatureClick: (featureId: string | null) => void;
   onFinalizeDraft: () => void;
   onMapClick: (event: MapCanvasLayerMouseEvent) => void;
   onMapHover: (coordinate: LngLat | null) => void;
-  onMapStyleChange: (style: EditorMapStyle) => void;
   onInsertVertex: (featureId: string, segmentIndex: number) => void;
   onSelectVertex: (event: MapCanvasMarkerEvent, featureId: string, vertexIndex: number) => void;
   onVertexDrag: (featureId: string, vertexIndex: number, coordinate: LngLat) => void;
   onVertexDragEnd: (featureId: string, vertexIndex: number, coordinate: LngLat) => void;
   onVertexDragStart: () => void;
-  pendingFitBounds: [LngLat, LngLat] | null;
   selectedFeatureId: string | null;
   selectedMidpoints: Array<{ coordinate: LngLat; segmentIndex: number }>;
   selectedVertexIndex: number | null;
   selectedVertices: LngLat[];
   setIsHoveringSelectableFeature: (value: boolean) => void;
-  setPendingFitBounds: (bounds: [LngLat, LngLat] | null) => void;
-  viewport: { center: LngLat; zoomLevel: number };
-  onViewportChange: (viewport: { center: LngLat; zoomLevel: number }) => void;
 };
 
 export function MapCanvas({
@@ -227,35 +230,28 @@ export function MapCanvas({
   hoverCoordinate,
   isDraggingVertex,
   isHoveringSelectableFeature,
-  mapSource,
-  mapStyle,
-  mapStyleUrl,
-  mapStyleOptions,
+  mapActions,
+  mapState,
   mode,
   onCloseDraftLineLoop,
   onFeatureClick,
   onFinalizeDraft,
   onMapClick,
   onMapHover,
-  onMapStyleChange,
   onInsertVertex,
   onSelectVertex,
   onVertexDrag,
   onVertexDragEnd,
   onVertexDragStart,
-  pendingFitBounds,
   selectedFeatureId,
   selectedMidpoints,
   selectedVertexIndex,
   selectedVertices,
   setIsHoveringSelectableFeature,
-  setPendingFitBounds,
-  viewport,
-  onViewportChange,
 }: MapCanvasProps) {
   const mapRef = useRef<MapboxMapRef | MapLibreMapRef | null>(null);
-  const center = viewport.center;
-  const zoom = viewport.zoomLevel;
+  const center = mapState.viewport.center;
+  const zoom = mapState.viewport.zoomLevel;
   const renderedFeatures = useMemo(
     () => buildRenderableFeatures(features, selectedFeatureId),
     [features, selectedFeatureId],
@@ -264,19 +260,19 @@ export function MapCanvas({
     () => buildDraftFeatures(mode, draftCoordinates, hoverCoordinate),
     [draftCoordinates, hoverCoordinate, mode],
   );
-  const isMapbox = getMapRenderer(mapSource) === "mapbox";
+  const isMapbox = getMapRenderer(mapState.mapSource) === "mapbox";
 
   useEffect(() => {
-    if (!pendingFitBounds || !mapRef.current) {
+    if (!mapState.pendingFitBounds || !mapRef.current) {
       return;
     }
 
-    mapRef.current.fitBounds(pendingFitBounds, {
+    mapRef.current.fitBounds(mapState.pendingFitBounds, {
       padding: 64,
       duration: 800,
     });
-    setPendingFitBounds(null);
-  }, [pendingFitBounds, setPendingFitBounds]);
+    mapActions.setPendingFitBounds(null);
+  }, [mapActions, mapState.pendingFitBounds]);
 
   const MapComponent: any = isMapbox ? MapboxMap : MapLibreMap;
   const LayerComponent: any = isMapbox ? MapboxLayer : MapLibreLayer;
@@ -290,10 +286,13 @@ export function MapCanvas({
     latitude: center[1],
     longitude: center[0],
     zoom,
-    mapStyle: mapStyleUrl,
+    bearing: mapState.isBearingEnabled ? undefined : 0,
+    pitch: mapState.isPitchEnabled ? undefined : 0,
+    mapStyle: mapState.mapStyleUrl,
     cursor: getMapCursor(mode, isDraggingVertex, isHoveringSelectableFeature),
     doubleClickZoom: true,
     dragPan: !isDraggingVertex,
+    dragRotate: mapState.isBearingEnabled || mapState.isPitchEnabled,
     interactiveLayerIds: INTERACTIVE_LAYER_IDS,
     onClick: (event: MapCanvasLayerMouseEvent) => {
       onMapClick(event);
@@ -333,11 +332,12 @@ export function MapCanvas({
       setIsHoveringSelectableFeature(false);
     },
     onMove: (event: { viewState: { longitude: number; latitude: number; zoom: number } }) => {
-      onViewportChange({
+      mapActions.setViewport({
         center: [event.viewState.longitude, event.viewState.latitude],
         zoomLevel: event.viewState.zoom,
       });
     },
+    pitchWithRotate: mapState.isPitchEnabled,
     style: { width: "100%", height: "100%" },
   };
 
@@ -423,16 +423,16 @@ export function MapCanvas({
       </MapComponent>
       <div className="pointer-events-none absolute left-3 top-2 z-10">
         <div className="pointer-events-auto flex items-center rounded-xl shadow-lg">
-          {mapStyleOptions.map((option) => {
+          {mapState.mapStyleOptions.map((option) => {
             const Icon = MAP_STYLE_ICON_MAP[option.value as keyof typeof MAP_STYLE_ICON_MAP] ?? IconMap;
 
             return (
               <Button
                 className={
-                  `${mapStyle === option.value ? "bg-slate-300" : "bg-white"} h-8 min-w-8 rounded-none border-y-2 border-l-2 border-slate-500/20 px-1.5 text-slate-900 shadow-none first:rounded-l-xl last:rounded-r-xl last:border-r-2 hover:bg-slate-100`
+                  `${mapState.mapStyle === option.value ? "bg-slate-300" : "bg-white"} h-8 min-w-8 rounded-none border-y-2 border-l-2 border-slate-500/20 px-1.5 text-slate-900 shadow-none first:rounded-l-xl last:rounded-r-xl last:border-r-2 hover:bg-slate-100`
                 }
                 key={option.value}
-                onClick={() => onMapStyleChange(option.value as EditorMapStyle)}
+                onClick={() => mapActions.setMapStyle(option.value as EditorMapStyle)}
                 title={option.label}
                 variant="ghost"
               >
