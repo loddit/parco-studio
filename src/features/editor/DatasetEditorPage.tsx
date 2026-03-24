@@ -11,6 +11,7 @@ import {
   type LngLat,
 } from "@/types/dataset";
 import { EditorSidebar } from "./EditorSidebar";
+import { ExportModal, type ExportFormat } from "./ExportModal";
 import {
   appendFeature,
   cloneFeatureCollection,
@@ -20,6 +21,7 @@ import {
   extractSupportedFeatures,
   FALLBACK_CENTER,
   FALLBACK_ZOOM,
+  formatCoordinateElevation,
   formatLineLength,
   getFeatureBounds,
   getClickedFeatureId,
@@ -32,6 +34,7 @@ import {
   removeFeatureVertex,
   updateFeatureVertex,
 } from "./editor-helpers";
+import { exportLineStringToGpx, parseGpx } from "./gpx";
 import type { MapCanvasLayerMouseEvent, MapCanvasMarkerEvent } from "./MapCanvas";
 import type { EditorMode } from "./editor-types";
 import { useEditorMapState } from "./useEditorMapState";
@@ -63,6 +66,8 @@ export function DatasetEditorPage() {
   const [isHoveringSelectableFeature, setIsHoveringSelectableFeature] = useState(false);
   const [features, setFeatures] = useState<DatasetFeatureCollection>(createEmptyFeatureCollection());
   const [isDraggingVertex, setIsDraggingVertex] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFileName, setExportFileName] = useState("");
 
   function resetSelectionState() {
     setSelectedFeatureId(null);
@@ -331,7 +336,7 @@ export function DatasetEditorPage() {
     dragStartFeaturesRef.current = null;
   }
 
-  async function handleImportGeoJson(event: ChangeEvent<HTMLInputElement>) {
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -339,12 +344,17 @@ export function DatasetEditorPage() {
     }
 
     try {
-      const parsed = JSON.parse(await file.text()) as GeoJSON;
-      const importedFeatures = extractSupportedFeatures(parsed);
+      const content = await file.text();
+      const fileName = file.name.toLowerCase();
+      const importedFeatures = fileName.endsWith(".gpx")
+        ? parseGpx(content)
+        : extractSupportedFeatures(JSON.parse(content) as GeoJSON);
 
       if (importedFeatures.length === 0) {
         window.alert(
-          "No supported GeoJSON features found. Only Point, LineString, and Polygon are imported.",
+          fileName.endsWith(".gpx")
+            ? "No supported GPX features found. Waypoints and tracks/routes with at least two points are imported."
+            : "No supported GeoJSON features found. Only Point, LineString, and Polygon are imported.",
         );
         return;
       }
@@ -356,7 +366,11 @@ export function DatasetEditorPage() {
       resetTransientEditorState();
       mapActions.setPendingFitBounds(getFeatureBounds(importedFeatures));
     } catch {
-      window.alert("Failed to import GeoJSON. Check that the file contains valid JSON.");
+      window.alert(
+        file.name.toLowerCase().endsWith(".gpx")
+          ? "Failed to import GPX. Check that the file contains valid GPX XML."
+          : "Failed to import GeoJSON. Check that the file contains valid JSON.",
+      );
     } finally {
       event.target.value = "";
     }
@@ -382,6 +396,12 @@ export function DatasetEditorPage() {
           getLineDistanceToVertex(selectedFeature as Feature<LineString>, selectedVertexIndex),
         )
       : null;
+  const selectedFeatureElevation =
+    selectedFeature?.geometry.type === "Point"
+      ? formatCoordinateElevation(selectedFeature.geometry.coordinates as LngLat)
+      : "unknown";
+  const selectedVertexElevation =
+    selectedVertexIndex !== null ? formatCoordinateElevation(selectedVertices[selectedVertexIndex]) : null;
   const isDirty =
     !dataset ||
     JSON.stringify(dataset.features) !== JSON.stringify(features) ||
@@ -393,16 +413,37 @@ export function DatasetEditorPage() {
       return;
     }
 
-    const blob = new Blob([JSON.stringify(selectedFeature, null, 2)], {
-      type: "application/geo+json",
-    });
+    setExportFileName(getDefaultExportFileName(selectedFeature));
+    setIsExportModalOpen(true);
+  }
+
+  function handleExport(format: ExportFormat) {
+    if (!selectedFeature) {
+      return;
+    }
+
+    if (format === "gpx" && selectedFeature.geometry.type !== "LineString") {
+      return;
+    }
+
+    const sanitizedFileName = sanitizeExportFileName(exportFileName) || getDefaultExportFileName(selectedFeature);
+    const extension = format === "gpx" ? "gpx" : "geojson";
+    const blob =
+      format === "gpx"
+        ? new Blob([exportLineStringToGpx(selectedFeature, sanitizedFileName)], {
+            type: "application/gpx+xml",
+          })
+        : new Blob([JSON.stringify(selectedFeature, null, 2)], {
+            type: "application/geo+json",
+          });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `${selectedFeature.geometry.type.toLowerCase()}-${String(selectedFeature.id)}.geojson`;
+    link.download = `${sanitizedFileName}.${extension}`;
     link.click();
     URL.revokeObjectURL(url);
+    setIsExportModalOpen(false);
   }
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
@@ -492,13 +533,15 @@ export function DatasetEditorPage() {
         mode={mode}
         onDeleteSelectedFeature={handleDeleteSelectedFeature}
         onExportSelectedFeature={handleExportSelectedFeature}
-        onImportFileChange={handleImportGeoJson}
+        onImportFileChange={handleImportFile}
         onModeChange={handleModeChange}
         onOpenImport={() => importInputRef.current?.click()}
         onReset={handleResetDataset}
         onSave={() => void handleSaveDataset()}
+        selectedFeatureElevation={selectedFeatureElevation}
         selectedFeature={selectedFeature}
         selectedFeatureLength={selectedFeatureLength}
+        selectedVertexElevation={selectedVertexElevation}
         selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
         selectedVertexIndex={selectedVertexIndex}
         selectedVerticesCount={selectedVertices.length}
@@ -541,6 +584,29 @@ export function DatasetEditorPage() {
           />
         </Suspense>
       </section>
+
+      {isExportModalOpen && selectedFeature ? (
+        <ExportModal
+          canExportGpx={selectedFeature.geometry.type === "LineString"}
+          fileName={exportFileName}
+          onClose={() => setIsExportModalOpen(false)}
+          onFileNameChange={setExportFileName}
+          onExport={handleExport}
+        />
+      ) : null}
     </main>
   );
+}
+
+function sanitizeExportFileName(value: string) {
+  return value.trim().replace(/[\\/:*?"<>|]+/g, "-");
+}
+
+function getDefaultExportFileName(feature: Feature<DatasetGeometry>) {
+  const baseName =
+    typeof feature.properties?.name === "string" && feature.properties.name.trim().length > 0
+      ? feature.properties.name.trim()
+      : `${feature.geometry.type.toLowerCase()}-${String(feature.id)}`;
+
+  return sanitizeExportFileName(baseName);
 }

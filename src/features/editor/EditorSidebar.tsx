@@ -42,8 +42,10 @@ type EditorSidebarProps = {
   onOpenImport: () => void;
   onReset: () => void;
   onSave: () => void;
+  selectedFeatureElevation: string;
   selectedFeature: Feature<DatasetGeometry> | null;
   selectedFeatureLength: string | null;
+  selectedVertexElevation: string | null;
   selectedVertexDistanceFromStart: string | null;
   selectedVertexIndex: number | null;
   selectedVerticesCount: number;
@@ -65,8 +67,10 @@ export function EditorSidebar({
   onOpenImport,
   onReset,
   onSave,
+  selectedFeatureElevation,
   selectedFeature,
   selectedFeatureLength,
+  selectedVertexElevation,
   selectedVertexDistanceFromStart,
   selectedVertexIndex,
   selectedVerticesCount,
@@ -122,7 +126,7 @@ export function EditorSidebar({
       </div>
 
       <input
-        accept=".geojson,.json,application/geo+json,application/json"
+        accept=".geojson,.json,.gpx,application/geo+json,application/json,application/gpx+xml"
         className="hidden"
         onChange={(event) => void onImportFileChange(event)}
         ref={importInputRef}
@@ -190,8 +194,10 @@ export function EditorSidebar({
             <SelectedFeatureCard
               onDelete={onDeleteSelectedFeature}
               onExport={onExportSelectedFeature}
+              selectedFeatureElevation={selectedFeatureElevation}
               selectedFeature={selectedFeature}
               selectedFeatureLength={selectedFeatureLength}
+              selectedVertexElevation={selectedVertexElevation}
               selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
               selectedVertexIndex={selectedVertexIndex}
               selectedVerticesCount={selectedVerticesCount}
@@ -308,16 +314,20 @@ export function EditorSidebar({
 function SelectedFeatureCard({
   onDelete,
   onExport,
+  selectedFeatureElevation,
   selectedFeature,
   selectedFeatureLength,
+  selectedVertexElevation,
   selectedVertexDistanceFromStart,
   selectedVertexIndex,
   selectedVerticesCount,
 }: {
   onDelete: () => void;
   onExport: () => void;
+  selectedFeatureElevation: string;
   selectedFeature: Feature<DatasetGeometry>;
   selectedFeatureLength: string | null;
+  selectedVertexElevation: string | null;
   selectedVertexDistanceFromStart: string | null;
   selectedVertexIndex: number | null;
   selectedVerticesCount: number;
@@ -327,10 +337,14 @@ function SelectedFeatureCard({
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Selected</p>
       <p className="mt-2 font-medium text-slate-900">{selectedFeature.geometry.type}</p>
       <p className="mt-1">Vertices: {selectedVerticesCount}</p>
+      {selectedFeature.geometry.type === "Point" ? (
+        <p className="mt-1">Elevation: {selectedFeatureElevation}</p>
+      ) : null}
       {selectedFeatureLength ? <p className="mt-1">Length: {selectedFeatureLength}</p> : null}
       {selectedFeature.geometry.type === "LineString" && selectedVertexIndex !== null ? (
         <>
           <p className="mt-1 text-orange-600">Selected vertex: {selectedVertexIndex + 1}</p>
+          <p className="mt-1 text-orange-600">Elevation: {selectedVertexElevation ?? "unknown"}</p>
           {selectedVertexDistanceFromStart ? (
             <p className="mt-1 text-orange-600">
               Distance from start: {selectedVertexDistanceFromStart}

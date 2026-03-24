@@ -10,7 +10,7 @@ import type {
   Polygon,
   Position,
 } from "geojson";
-import type { DatasetFeatureCollection, DatasetGeometry, LngLat } from "@/types/dataset";
+import type { DatasetFeatureCollection, DatasetGeometry, LngLat, LngLatBounds } from "@/types/dataset";
 import type { EditorMode } from "./editor-types";
 
 type ClickedFeatureEvent = {
@@ -199,11 +199,12 @@ export function updateFeatureVertex(
       }
 
       if (feature.geometry.type === "Point") {
+        const currentCoordinate = feature.geometry.coordinates as LngLat;
         return {
           ...feature,
           geometry: {
             ...feature.geometry,
-            coordinates: coordinate,
+            coordinates: mergeCoordinateElevation(currentCoordinate, coordinate),
           },
         };
       }
@@ -214,14 +215,16 @@ export function updateFeatureVertex(
           geometry: {
             ...feature.geometry,
             coordinates: feature.geometry.coordinates.map((current, index) =>
-              index === vertexIndex ? coordinate : current,
+              index === vertexIndex
+                ? mergeCoordinateElevation(current as LngLat, coordinate)
+                : current,
             ) as Position[],
           },
         };
       }
 
       const ring = [...feature.geometry.coordinates[0]];
-      ring[vertexIndex] = coordinate;
+      ring[vertexIndex] = mergeCoordinateElevation(ring[vertexIndex] as LngLat, coordinate);
       ring[ring.length - 1] = ring[0];
 
       return {
@@ -402,7 +405,7 @@ export function cloneFeatureCollection(
   return structuredClone(collection);
 }
 
-export function getFeatureBounds(features: Array<Feature<DatasetGeometry>>): [LngLat, LngLat] | null {
+export function getFeatureBounds(features: Array<Feature<DatasetGeometry>>): LngLatBounds | null {
   const coordinates = features.flatMap((feature) => getGeometryCoordinates(feature.geometry));
 
   if (coordinates.length === 0) {
@@ -440,7 +443,16 @@ function getGeometryCoordinates(geometry: DatasetGeometry): LngLat[] {
 }
 
 export function getMidpoint(start: LngLat, end: LngLat): LngLat {
-  return [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+  const longitude = (start[0] + end[0]) / 2;
+  const latitude = (start[1] + end[1]) / 2;
+  const startElevation = getCoordinateElevation(start);
+  const endElevation = getCoordinateElevation(end);
+
+  if (startElevation !== null && endElevation !== null) {
+    return [longitude, latitude, (startElevation + endElevation) / 2];
+  }
+
+  return [longitude, latitude];
 }
 
 export function formatLineLength(lengthInKilometers: number) {
@@ -515,4 +527,34 @@ export function isTypingTarget(target: EventTarget | null) {
     target.tagName === "SELECT" ||
     target.isContentEditable
   );
+}
+
+export function getCoordinateElevation(coordinate: LngLat | null | undefined) {
+  if (!coordinate || typeof coordinate[2] !== "number" || Number.isNaN(coordinate[2])) {
+    return null;
+  }
+
+  return coordinate[2];
+}
+
+export function formatCoordinateElevation(coordinate: LngLat | null | undefined) {
+  const elevation = getCoordinateElevation(coordinate);
+
+  if (elevation === null) {
+    return "unknown";
+  }
+
+  return `${Number(elevation.toFixed(2))} m`;
+}
+
+function mergeCoordinateElevation(current: LngLat, next: LngLat): LngLat {
+  if (typeof next[2] === "number" && !Number.isNaN(next[2])) {
+    return next;
+  }
+
+  if (typeof current[2] === "number" && !Number.isNaN(current[2])) {
+    return [next[0], next[1], current[2]];
+  }
+
+  return [next[0], next[1]];
 }

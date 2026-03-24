@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { LngLat } from "@/types/dataset";
+import type { LngLat, LngLatBounds } from "@/types/dataset";
 import {
   DEFAULT_MAP_SOURCE,
   getInitialMapStyle,
@@ -24,7 +24,7 @@ export type EditorMapState = {
   mapStyle: EditorMapStyle;
   mapStyleOptions: Array<{ value: string; label: string }>;
   mapStyleUrl: string;
-  pendingFitBounds: [LngLat, LngLat] | null;
+  pendingFitBounds: LngLatBounds | null;
   selectedMapSourceRequirement: string | null;
   viewport: EditorMapViewport;
 };
@@ -33,7 +33,7 @@ export type EditorMapActions = {
   setBearingEnabled: (nextValue: boolean) => void;
   setMapSource: (nextSource: EditorMapSource) => void;
   setMapStyle: (nextStyle: EditorMapStyle) => void;
-  setPendingFitBounds: (bounds: [LngLat, LngLat] | null) => void;
+  setPendingFitBounds: (bounds: LngLatBounds | null) => void;
   setPitchEnabled: (nextValue: boolean) => void;
   setViewport: (viewport: EditorMapViewport) => void;
 };
@@ -46,7 +46,7 @@ export function useEditorMapState({
   initialViewport,
 }: UseEditorMapStateOptions): { mapState: EditorMapState; mapActions: EditorMapActions } {
   const [viewport, setViewport] = useState<EditorMapViewport>(initialViewport);
-  const [pendingFitBounds, setPendingFitBounds] = useState<[LngLat, LngLat] | null>(null);
+  const [pendingFitBounds, setPendingFitBounds] = useState<LngLatBounds | null>(null);
   const [isBearingEnabled, setBearingEnabled] = useState(false);
   const [isPitchEnabled, setPitchEnabled] = useState(false);
   const [mapSource, setMapSourceState] = useState<EditorMapSource>(DEFAULT_MAP_SOURCE);
