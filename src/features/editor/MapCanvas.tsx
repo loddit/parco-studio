@@ -6,7 +6,7 @@ import {
   IconSatellite,
   IconSun,
 } from "@tabler/icons-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import MapboxMap, {
   Layer as MapboxLayer,
   Marker as MapboxMarker,
@@ -256,8 +256,14 @@ export function MapCanvas({
   const mapRef = useRef<MapboxMapRef | MapLibreMapRef | null>(null);
   const center = viewport.center;
   const zoom = viewport.zoomLevel;
-  const renderedFeatures = buildRenderableFeatures(features, selectedFeatureId);
-  const draftFeatures = buildDraftFeatures(mode, draftCoordinates, hoverCoordinate);
+  const renderedFeatures = useMemo(
+    () => buildRenderableFeatures(features, selectedFeatureId),
+    [features, selectedFeatureId],
+  );
+  const draftFeatures = useMemo(
+    () => buildDraftFeatures(mode, draftCoordinates, hoverCoordinate),
+    [draftCoordinates, hoverCoordinate, mode],
+  );
   const isMapbox = getMapRenderer(mapSource) === "mapbox";
 
   useEffect(() => {

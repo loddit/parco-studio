@@ -1,6 +1,6 @@
 import type { ChangeEvent } from "react";
 import type { Feature, GeoJSON, LineString } from "geojson";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getDataset, saveDatasetState } from "@/lib/datasets-db";
 import {
@@ -32,7 +32,7 @@ import {
   removeFeatureVertex,
   updateFeatureVertex,
 } from "./editor-helpers";
-import { MapCanvas, type MapCanvasLayerMouseEvent, type MapCanvasMarkerEvent } from "./MapCanvas";
+import type { MapCanvasLayerMouseEvent, MapCanvasMarkerEvent } from "./MapCanvas";
 import type { EditorMode } from "./editor-types";
 import {
   DEFAULT_MAP_SOURCE,
@@ -44,6 +44,12 @@ import {
   type EditorMapSource,
   type EditorMapStyle,
 } from "./map-config";
+
+const MapCanvas = lazy(() =>
+  import("./MapCanvas").then((module) => ({
+    default: module.MapCanvas,
+  })),
+);
 
 export function DatasetEditorPage() {
   const { datasetId = "" } = useParams();
@@ -68,6 +74,23 @@ export function DatasetEditorPage() {
   const [mapSource, setMapSource] = useState<EditorMapSource>(DEFAULT_MAP_SOURCE);
   const [mapStyle, setMapStyle] = useState<EditorMapStyle>(getInitialMapStyle(DEFAULT_MAP_SOURCE));
 
+  function resetSelectionState() {
+    setSelectedFeatureId(null);
+    setSelectedVertexIndex(null);
+  }
+
+  function resetDraftState() {
+    setDraftCoordinates([]);
+    setHoverCoordinate(null);
+  }
+
+  function resetTransientEditorState(nextMode: EditorMode = "select") {
+    resetSelectionState();
+    resetDraftState();
+    setIsHoveringSelectableFeature(false);
+    setMode(nextMode);
+  }
+
   useEffect(() => {
     void loadDataset();
   }, [datasetId]);
@@ -84,11 +107,7 @@ export function DatasetEditorPage() {
     undoStackRef.current = [];
     redoStackRef.current = [];
     dragStartFeaturesRef.current = null;
-    setSelectedFeatureId(null);
-    setSelectedVertexIndex(null);
-    setDraftCoordinates([]);
-    setHoverCoordinate(null);
-    setIsHoveringSelectableFeature(false);
+    resetTransientEditorState();
     setViewport({
       center: nextDataset.center ?? [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
       zoomLevel: nextDataset.zoomLevel ?? FALLBACK_ZOOM,
@@ -118,12 +137,7 @@ export function DatasetEditorPage() {
     undoStackRef.current = [];
     redoStackRef.current = [];
     dragStartFeaturesRef.current = null;
-    setSelectedFeatureId(null);
-    setSelectedVertexIndex(null);
-    setDraftCoordinates([]);
-    setHoverCoordinate(null);
-    setIsHoveringSelectableFeature(false);
-    setMode("select");
+    resetTransientEditorState();
     setViewport({
       center: dataset.center ?? [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
       zoomLevel: dataset.zoomLevel ?? FALLBACK_ZOOM,
@@ -131,12 +145,7 @@ export function DatasetEditorPage() {
   }
 
   function handleModeChange(nextMode: EditorMode) {
-    setMode(nextMode);
-    setSelectedFeatureId(null);
-    setSelectedVertexIndex(null);
-    setDraftCoordinates([]);
-    setHoverCoordinate(null);
-    setIsHoveringSelectableFeature(false);
+    resetTransientEditorState(nextMode);
   }
 
   function commitFeatureChange(nextFeatures: DatasetFeatureCollection) {
@@ -153,11 +162,7 @@ export function DatasetEditorPage() {
 
   function applyHistorySnapshot(nextFeatures: DatasetFeatureCollection) {
     setFeatures(nextFeatures);
-    setSelectedFeatureId(null);
-    setSelectedVertexIndex(null);
-    setDraftCoordinates([]);
-    setHoverCoordinate(null);
-    setMode("select");
+    resetTransientEditorState();
   }
 
   function handleUndo() {
@@ -202,7 +207,7 @@ export function DatasetEditorPage() {
       commitFeatureChange(appendFeature(features, nextFeature));
       setSelectedFeatureId(String(nextFeature.id));
       setSelectedVertexIndex(null);
-      setHoverCoordinate(null);
+      resetDraftState();
       setMode("select");
       return;
     }
@@ -224,8 +229,7 @@ export function DatasetEditorPage() {
       commitFeatureChange(appendFeature(features, nextFeature));
       setSelectedFeatureId(String(nextFeature.id));
       setSelectedVertexIndex(null);
-      setDraftCoordinates([]);
-      setHoverCoordinate(null);
+      resetDraftState();
       setMode("select");
       return;
     }
@@ -239,8 +243,7 @@ export function DatasetEditorPage() {
       commitFeatureChange(appendFeature(features, nextFeature));
       setSelectedFeatureId(String(nextFeature.id));
       setSelectedVertexIndex(null);
-      setDraftCoordinates([]);
-      setHoverCoordinate(null);
+      resetDraftState();
       setMode("select");
     }
   }
@@ -255,14 +258,12 @@ export function DatasetEditorPage() {
     commitFeatureChange(appendFeature(features, nextFeature));
     setSelectedFeatureId(String(nextFeature.id));
     setSelectedVertexIndex(null);
-    setDraftCoordinates([]);
-    setHoverCoordinate(null);
+    resetDraftState();
     setMode("select");
   }
 
   function cancelDraft() {
-    setDraftCoordinates([]);
-    setHoverCoordinate(null);
+    resetDraftState();
   }
 
   function handleDeleteSelectedFeature() {
@@ -367,11 +368,7 @@ export function DatasetEditorPage() {
         ...features,
         features: [...features.features, ...importedFeatures],
       });
-      setSelectedFeatureId(null);
-      setSelectedVertexIndex(null);
-      setDraftCoordinates([]);
-      setHoverCoordinate(null);
-      setMode("select");
+      resetTransientEditorState();
       setPendingFitBounds(getFeatureBounds(importedFeatures));
     } catch {
       window.alert("Failed to import GeoJSON. Check that the file contains valid JSON.");
@@ -427,63 +424,66 @@ export function DatasetEditorPage() {
     URL.revokeObjectURL(url);
   }
 
+  const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (isTypingTarget(event.target)) {
+      return;
+    }
+
+    if (event.key === "Escape") {
+      if (draftCoordinates.length > 0) {
+        event.preventDefault();
+        cancelDraft();
+        return;
+      }
+
+      resetSelectionState();
+      return;
+    }
+
+    if (event.key === "Enter" && (mode === "draw-line" || mode === "draw-polygon")) {
+      event.preventDefault();
+      finalizeDraft();
+      return;
+    }
+
+    if (event.key === "Backspace" && (mode === "draw-line" || mode === "draw-polygon")) {
+      if (draftCoordinates.length > 0) {
+        event.preventDefault();
+        setDraftCoordinates((current) => current.slice(0, -1));
+      }
+      return;
+    }
+
+    if ((event.key === "Delete" || event.key === "Backspace") && selectedVertexIndex !== null) {
+      event.preventDefault();
+      handleDeleteSelectedVertex();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      if (event.shiftKey) {
+        handleRedo();
+        return;
+      }
+      handleUndo();
+      return;
+    }
+
+    if (event.key === "Delete" && selectedFeatureId) {
+      event.preventDefault();
+      handleDeleteSelectedFeature();
+    }
+  });
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        if (draftCoordinates.length > 0) {
-          event.preventDefault();
-          cancelDraft();
-          return;
-        }
-
-        setSelectedFeatureId(null);
-        setSelectedVertexIndex(null);
-        return;
-      }
-
-      if (event.key === "Enter" && (mode === "draw-line" || mode === "draw-polygon")) {
-        event.preventDefault();
-        finalizeDraft();
-        return;
-      }
-
-      if (event.key === "Backspace" && (mode === "draw-line" || mode === "draw-polygon")) {
-        if (draftCoordinates.length > 0) {
-          event.preventDefault();
-          setDraftCoordinates((current) => current.slice(0, -1));
-        }
-        return;
-      }
-
-      if ((event.key === "Delete" || event.key === "Backspace") && selectedVertexIndex !== null) {
-        event.preventDefault();
-        handleDeleteSelectedVertex();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
-        event.preventDefault();
-        if (event.shiftKey) {
-          handleRedo();
-          return;
-        }
-        handleUndo();
-        return;
-      }
-
-      if (event.key === "Delete" && selectedFeatureId) {
-        event.preventDefault();
-        handleDeleteSelectedFeature();
-      }
+      onWindowKeyDown(event);
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [draftCoordinates.length, mode, selectedFeatureId, selectedVertexIndex, features]);
+  }, [onWindowKeyDown]);
 
   if (!dataset) {
     return (
@@ -526,38 +526,48 @@ export function DatasetEditorPage() {
       />
 
       <section className="min-w-0 flex-1">
-        <MapCanvas
-          draftCoordinates={draftCoordinates}
-          features={features}
-          hoverCoordinate={hoverCoordinate}
-          isDraggingVertex={isDraggingVertex}
-          isHoveringSelectableFeature={isHoveringSelectableFeature}
-          mapSource={mapSource}
-          mapStyle={mapStyle}
-          mapStyleUrl={mapStyleUrl}
-          mapStyleOptions={mapStyleOptions}
-          mode={mode}
-          onCloseDraftLineLoop={handleCloseDraftLineLoop}
-          onFeatureClick={setSelectedFeatureId}
-          onFinalizeDraft={finalizeDraft}
-          onMapClick={handleMapClick}
-          onMapHover={setHoverCoordinate}
-          onMapStyleChange={setMapStyle}
-          onInsertVertex={handleInsertVertex}
-          onSelectVertex={handleSelectVertex}
-          onVertexDrag={handleVertexDrag}
-          onVertexDragEnd={handleVertexDragEnd}
-          onVertexDragStart={handleVertexDragStart}
-          pendingFitBounds={pendingFitBounds}
-          selectedFeatureId={selectedFeatureId}
-          selectedMidpoints={selectedMidpoints}
-          selectedVertexIndex={selectedVertexIndex}
-          selectedVertices={selectedVertices}
-          setIsHoveringSelectableFeature={setIsHoveringSelectableFeature}
-          setPendingFitBounds={setPendingFitBounds}
-          viewport={viewport}
-          onViewportChange={setViewport}
-        />
+        <Suspense
+          fallback={
+            <div className="flex h-full min-h-screen items-center justify-center bg-slate-100">
+              <div className="rounded-3xl border border-sky-100 bg-white px-6 py-4 text-sm font-medium text-slate-600 shadow-sm">
+                Loading map canvas...
+              </div>
+            </div>
+          }
+        >
+          <MapCanvas
+            draftCoordinates={draftCoordinates}
+            features={features}
+            hoverCoordinate={hoverCoordinate}
+            isDraggingVertex={isDraggingVertex}
+            isHoveringSelectableFeature={isHoveringSelectableFeature}
+            mapSource={mapSource}
+            mapStyle={mapStyle}
+            mapStyleUrl={mapStyleUrl}
+            mapStyleOptions={mapStyleOptions}
+            mode={mode}
+            onCloseDraftLineLoop={handleCloseDraftLineLoop}
+            onFeatureClick={setSelectedFeatureId}
+            onFinalizeDraft={finalizeDraft}
+            onMapClick={handleMapClick}
+            onMapHover={setHoverCoordinate}
+            onMapStyleChange={setMapStyle}
+            onInsertVertex={handleInsertVertex}
+            onSelectVertex={handleSelectVertex}
+            onVertexDrag={handleVertexDrag}
+            onVertexDragEnd={handleVertexDragEnd}
+            onVertexDragStart={handleVertexDragStart}
+            pendingFitBounds={pendingFitBounds}
+            selectedFeatureId={selectedFeatureId}
+            selectedMidpoints={selectedMidpoints}
+            selectedVertexIndex={selectedVertexIndex}
+            selectedVertices={selectedVertices}
+            setIsHoveringSelectableFeature={setIsHoveringSelectableFeature}
+            setPendingFitBounds={setPendingFitBounds}
+            viewport={viewport}
+            onViewportChange={setViewport}
+          />
+        </Suspense>
       </section>
     </main>
   );
