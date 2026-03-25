@@ -1,6 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #0ea5e9;
+  --shadow-panel: 0 18px 44px rgba(14, 165, 233, 0.14);
+}
 
 :root {
   color-scheme: light;
