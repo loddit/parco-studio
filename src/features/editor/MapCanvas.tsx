@@ -1,14 +1,6 @@
-import {
-  IconLeaf,
-  IconMap,
-  IconMoon,
-  IconMountain,
-  IconSatellite,
-  IconSun,
-} from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Button } from "@/components/Button";
 import { GeocodingBar } from "./GeocodingBar";
+import { MapStyleSwitcher } from "./MapStyleSwitcher";
 import type { DatasetFeatureCollection, LngLat, LngLatBounds } from "@/types/dataset";
 import {
   buildDraftFeatures,
@@ -18,7 +10,6 @@ import {
   type LinkableLineEndpoint,
 } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
-import type { EditorMapStyle } from "./map-config";
 import { GoogleMapCanvas } from "./GoogleMapCanvas";
 import {
   Layer,
@@ -58,15 +49,6 @@ const INTERACTIVE_LAYER_IDS = [
   SELECTED_LINE_LAYER_ID,
   SELECTED_POINT_LAYER_ID,
 ];
-
-const MAP_STYLE_ICON_MAP = {
-  default: IconMap,
-  satellite: IconSatellite,
-  terrain: IconMountain,
-  dark: IconMoon,
-  nature: IconLeaf,
-  light: IconSun,
-} as const;
 
 const FEATURE_FILL_LAYER: MapGLLayerProps<"fill"> = {
   id: FEATURE_FILL_LAYER_ID,
@@ -493,24 +475,11 @@ function MapGLCanvas({
       </MapGLProvider>
       <div className="pointer-events-none absolute left-1 top-0 z-10">
         <div className="pointer-events-auto flex items-start gap-2 px-2 py-2">
-          <div className="flex items-center rounded-xl bg-white">
-            {mapState.mapStyleOptions.map((option) => {
-              const Icon = MAP_STYLE_ICON_MAP[option.value as keyof typeof MAP_STYLE_ICON_MAP] ?? IconMap;
-
-              return (
-                <button
-                  className={`${
-                    mapState.mapStyle === option.value ? "bg-slate-300" : "bg-white"
-                  } h-9 min-w-9 rounded-none border-y-2 border-l-2 border-slate-500/20 px-1.5 text-slate-900 shadow-none first:rounded-l-xl last:rounded-r-xl last:border-r-2 hover:bg-slate-100 cursor-pointer`}
-                  key={option.value}
-                  onClick={() => mapActions.setMapStyle(option.value as EditorMapStyle)}
-                  title={option.label}
-                >
-                  <Icon size={20} stroke={2} />
-                </button>
-              );
-            })}
-          </div>
+          <MapStyleSwitcher
+            activeStyle={mapState.mapStyle}
+            onSelect={mapActions.setMapStyle}
+            options={mapState.mapStyleOptions}
+          />
           <GeocodingBar
             googleMapsApiKey={googleMapsApiKey}
             onLocationSelect={handleLocationSelect}
