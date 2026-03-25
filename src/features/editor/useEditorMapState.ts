@@ -19,8 +19,6 @@ export type EditorMapViewport = {
 };
 
 export type EditorMapState = {
-  isBearingEnabled: boolean;
-  isPitchEnabled: boolean;
   mapSource: EditorMapSource;
   mapSourceOptions: Array<{ value: EditorMapSource; label: string; isAvailable: boolean }>;
   mapStyle: EditorMapStyle;
@@ -33,11 +31,9 @@ export type EditorMapState = {
 };
 
 export type EditorMapActions = {
-  setBearingEnabled: (nextValue: boolean) => void;
   setMapSource: (nextSource: EditorMapSource) => void;
   setMapStyle: (nextStyle: EditorMapStyle) => void;
   setPendingFitBounds: (bounds: LngLatBounds | null) => void;
-  setPitchEnabled: (nextValue: boolean) => void;
   setViewport: (viewport: EditorMapViewport) => void;
 };
 
@@ -50,8 +46,6 @@ export function useEditorMapState({
 }: UseEditorMapStateOptions): { mapState: EditorMapState; mapActions: EditorMapActions } {
   const [viewport, setViewport] = useState<EditorMapViewport>(initialViewport);
   const [pendingFitBounds, setPendingFitBounds] = useState<LngLatBounds | null>(null);
-  const [isBearingEnabled, setBearingEnabled] = useState(false);
-  const [isPitchEnabled, setPitchEnabled] = useState(false);
   const [mapSource, setMapSourceState] = useState<EditorMapSource>(DEFAULT_MAP_SOURCE);
   const [mapStyle, setMapStyleState] = useState<EditorMapStyle>(getInitialMapStyle(DEFAULT_MAP_SOURCE));
 
@@ -61,8 +55,6 @@ export function useEditorMapState({
   }
 
   const mapState: EditorMapState = {
-    isBearingEnabled,
-    isPitchEnabled,
     mapSource,
     mapSourceOptions: getMapSourceOptions(),
     mapStyle,
@@ -75,11 +67,9 @@ export function useEditorMapState({
   };
 
   const mapActions: EditorMapActions = {
-    setBearingEnabled,
     setMapSource,
     setMapStyle: setMapStyleState,
     setPendingFitBounds,
-    setPitchEnabled,
     setViewport,
   };
 

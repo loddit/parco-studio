@@ -191,8 +191,6 @@ export type MapCanvasProps = {
   mapActions: Pick<EditorMapActions, "setMapStyle" | "setPendingFitBounds" | "setViewport">;
   mapState: Pick<
     EditorMapState,
-    | "isBearingEnabled"
-    | "isPitchEnabled"
     | "mapRenderer"
     | "mapStyle"
     | "mapStyleOptions"
@@ -352,10 +350,10 @@ function MapGLCanvas({
 
   if (isMapbox) {
     Object.assign(mapProps, {
-      bearing: mapState.isBearingEnabled ? undefined : 0,
-      pitch: mapState.isPitchEnabled ? undefined : 0,
-      dragRotate: mapState.isBearingEnabled || mapState.isPitchEnabled,
-      pitchWithRotate: mapState.isPitchEnabled,
+      bearing: 0,
+      pitch: 0,
+      dragRotate: false,
+      pitchWithRotate: false,
     });
   } else {
     Object.assign(mapProps, {

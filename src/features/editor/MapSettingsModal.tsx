@@ -4,15 +4,8 @@ import type { EditorMapActions, EditorMapState } from "./useEditorMapState";
 
 type MapSettingsModalProps = {
   isOpen: boolean;
-  mapActions: Pick<EditorMapActions, "setBearingEnabled" | "setMapSource" | "setPitchEnabled">;
-  mapState: Pick<
-    EditorMapState,
-    | "isBearingEnabled"
-    | "isPitchEnabled"
-    | "mapSource"
-    | "mapSourceOptions"
-    | "selectedMapSourceRequirement"
-  >;
+  mapActions: Pick<EditorMapActions, "setMapSource">;
+  mapState: Pick<EditorMapState, "mapSource" | "mapSourceOptions" | "selectedMapSourceRequirement">;
   onClose: () => void;
 };
 
@@ -20,8 +13,6 @@ export function MapSettingsModal({ isOpen, mapActions, mapState, onClose }: MapS
   if (!isOpen) {
     return null;
   }
-
-  const canControlInteraction = mapState.mapSource === "mapbox";
 
   return (
     <div
@@ -59,23 +50,6 @@ export function MapSettingsModal({ isOpen, mapActions, mapState, onClose }: MapS
               ))}
             </Select>
           </div>
-          {canControlInteraction ? (
-            <div>
-              <p className="mb-2 text-sm font-medium text-slate-700">Interaction</p>
-              <div className="grid grid-cols-2 gap-2">
-                <ToggleButton
-                  active={mapState.isBearingEnabled}
-                  label="Bearing"
-                  onClick={() => mapActions.setBearingEnabled(!mapState.isBearingEnabled)}
-                />
-                <ToggleButton
-                  active={mapState.isPitchEnabled}
-                  label="Pitch"
-                  onClick={() => mapActions.setPitchEnabled(!mapState.isPitchEnabled)}
-                />
-              </div>
-            </div>
-          ) : null}
           {mapState.selectedMapSourceRequirement ? (
             <p className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs text-slate-600">
               This source uses <code>{mapState.selectedMapSourceRequirement}</code>.
@@ -84,31 +58,5 @@ export function MapSettingsModal({ isOpen, mapActions, mapState, onClose }: MapS
         </div>
       </div>
     </div>
-  );
-}
-
-function ToggleButton({
-  active,
-  label,
-  onClick,
-  disabled,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Button
-      aria-pressed={active}
-      className="justify-between rounded-2xl px-4 py-3"
-      onClick={onClick}
-      disabled={disabled}
-      type="button"
-      variant={active ? "primary" : "secondary"}
-    >
-      <span>{label}</span>
-      <span className="text-xs uppercase tracking-[0.16em]">{active ? "On" : "Off"}</span>
-    </Button>
   );
 }

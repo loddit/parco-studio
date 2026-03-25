@@ -25,15 +25,8 @@ type EditorSidebarProps = {
   featureCount: number;
   importInputRef: React.RefObject<HTMLInputElement | null>;
   isDirty: boolean;
-  mapActions: Pick<EditorMapActions, "setBearingEnabled" | "setMapSource" | "setPitchEnabled">;
-  mapState: Pick<
-    EditorMapState,
-    | "isBearingEnabled"
-    | "isPitchEnabled"
-    | "mapSource"
-    | "mapSourceOptions"
-    | "selectedMapSourceRequirement"
-  >;
+  mapActions: Pick<EditorMapActions, "setMapSource">;
+  mapState: Pick<EditorMapState, "mapSource" | "mapSourceOptions" | "selectedMapSourceRequirement">;
   mode: EditorMode;
   onDeleteSelectedFeature: () => void;
   onExportSelectedFeature: () => void;
