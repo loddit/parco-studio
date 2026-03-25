@@ -31,6 +31,7 @@ const MAP_STYLE_ICON_MAP = {
 } as const;
 
 const GOOGLE_MAPS_LIBRARIES = ["marker"] as const;
+const GOOGLE_MAPS_ZOOM_OFFSET = 1;
 
 type GoogleMapCanvasProps = MapCanvasProps;
 
@@ -60,6 +61,7 @@ export function GoogleMapCanvas({
 }: GoogleMapCanvasProps) {
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? "";
   const googleMapsId = import.meta.env.VITE_GOOGLE_MAPS_ID?.trim() ?? "";
+  const googleMapsZoomLevel = mapState.viewport.zoomLevel + GOOGLE_MAPS_ZOOM_OFFSET;
   const renderedFeatures = useMemo(
     () => buildRenderableFeatures(features, selectedFeatureId),
     [features, selectedFeatureId],
@@ -108,7 +110,7 @@ export function GoogleMapCanvas({
           onCameraChanged={(event: MapCameraChangedEvent) => {
             mapActions.setViewport({
               center: [event.detail.center.lng, event.detail.center.lat],
-              zoomLevel: event.detail.zoom,
+              zoomLevel: event.detail.zoom - GOOGLE_MAPS_ZOOM_OFFSET,
             });
           }}
           onDblclick={(event: GoogleMapMouseEvent) => {
@@ -138,7 +140,7 @@ export function GoogleMapCanvas({
             setIsHoveringSelectableFeature(false);
           }}
           style={{ width: "100%", height: "100%" }}
-          zoom={mapState.viewport.zoomLevel}
+          zoom={googleMapsZoomLevel}
         >
           <GoogleMapLayers
             draftFeatures={draftFeatures}
