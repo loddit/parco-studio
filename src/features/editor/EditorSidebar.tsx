@@ -1,18 +1,20 @@
 import {
   IconChevronLeft,
+  IconCut,
   IconPoint,
   IconPointer,
+  IconTrash,
   IconVectorSpline,
-  IconVectorTriangle,
   IconLayoutSidebarLeftExpand,
   IconLayoutSidebarLeftCollapse,
+  IconLine,
+  IconPolygon,
 } from "@tabler/icons-react";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/Button";
-import { Select } from "@/components/Select";
-import type { Feature, LineString } from "geojson";
+import type { Feature } from "geojson";
 import type { DatasetGeometry } from "@/types/dataset";
 import { getModeDescription } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
@@ -28,6 +30,9 @@ type EditorSidebarProps = {
   mapActions: Pick<EditorMapActions, "setMapSource">;
   mapState: Pick<EditorMapState, "mapSource" | "mapSourceOptions" | "selectedMapSourceRequirement">;
   mode: EditorMode;
+  onLinkSelectedLineString: () => void;
+  onSplitSelectedLineString: () => void;
+  onDeleteSelectedVertex: () => void;
   onDeleteSelectedFeature: () => void;
   onExportSelectedFeature: () => void;
   onImportFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -42,6 +47,9 @@ type EditorSidebarProps = {
   selectedVertexDistanceFromStart: string | null;
   selectedVertexIndex: number | null;
   selectedVerticesCount: number;
+  canLinkSelectedLineString: boolean;
+  isLinkingSelectedLineString: boolean;
+  canSplitSelectedLineString: boolean;
 };
 
 export function EditorSidebar({
@@ -53,6 +61,9 @@ export function EditorSidebar({
   mapActions,
   mapState,
   mode,
+  onLinkSelectedLineString,
+  onSplitSelectedLineString,
+  onDeleteSelectedVertex,
   onDeleteSelectedFeature,
   onExportSelectedFeature,
   onImportFileChange,
@@ -67,6 +78,9 @@ export function EditorSidebar({
   selectedVertexDistanceFromStart,
   selectedVertexIndex,
   selectedVerticesCount,
+  canLinkSelectedLineString,
+  isLinkingSelectedLineString,
+  canSplitSelectedLineString,
 }: EditorSidebarProps) {
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() =>
@@ -159,14 +173,14 @@ export function EditorSidebar({
           />
           <ModeButton
             active={mode === "draw-line"}
-            icon={IconVectorSpline}
+            icon={IconLine}
             isCollapsed={isCollapsed}
             label="LineString"
             onClick={() => onModeChange("draw-line")}
           />
           <ModeButton
             active={mode === "draw-polygon"}
-            icon={IconVectorTriangle}
+            icon={IconPolygon}
             isCollapsed={isCollapsed}
             label="Polygon"
             onClick={() => onModeChange("draw-polygon")}
@@ -186,7 +200,10 @@ export function EditorSidebar({
           {selectedFeature ? (
             <SelectedFeatureCard
               onDelete={onDeleteSelectedFeature}
+              onDeleteVertex={onDeleteSelectedVertex}
               onExport={onExportSelectedFeature}
+              onLink={onLinkSelectedLineString}
+              onSplit={onSplitSelectedLineString}
               selectedFeatureElevation={selectedFeatureElevation}
               selectedFeature={selectedFeature}
               selectedFeatureLength={selectedFeatureLength}
@@ -194,6 +211,9 @@ export function EditorSidebar({
               selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
               selectedVertexIndex={selectedVertexIndex}
               selectedVerticesCount={selectedVerticesCount}
+              canLink={canLinkSelectedLineString}
+              isLinking={isLinkingSelectedLineString}
+              canSplit={canSplitSelectedLineString}
             />
           ) : (
             <div className="rounded-2xl border border-dashed border-sky-200 bg-sky-50/70 px-4 py-3 text-slate-500">
@@ -246,7 +266,10 @@ export function EditorSidebar({
 
 function SelectedFeatureCard({
   onDelete,
+  onDeleteVertex,
   onExport,
+  onLink,
+  onSplit,
   selectedFeatureElevation,
   selectedFeature,
   selectedFeatureLength,
@@ -254,9 +277,15 @@ function SelectedFeatureCard({
   selectedVertexDistanceFromStart,
   selectedVertexIndex,
   selectedVerticesCount,
+  canLink,
+  isLinking,
+  canSplit,
 }: {
   onDelete: () => void;
+  onDeleteVertex: () => void;
   onExport: () => void;
+  onLink: () => void;
+  onSplit: () => void;
   selectedFeatureElevation: string;
   selectedFeature: Feature<DatasetGeometry>;
   selectedFeatureLength: string | null;
@@ -264,35 +293,76 @@ function SelectedFeatureCard({
   selectedVertexDistanceFromStart: string | null;
   selectedVertexIndex: number | null;
   selectedVerticesCount: number;
+  canLink: boolean;
+  isLinking: boolean;
+  canSplit: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-sky-100 bg-white px-4 py-3 text-slate-600">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Selected</p>
-      <p className="mt-2 font-medium text-slate-900">{selectedFeature.geometry.type}</p>
-      <p className="mt-1">Vertices: {selectedVerticesCount}</p>
-      {selectedFeature.geometry.type === "Point" ? (
-        <p className="mt-1">Elevation: {selectedFeatureElevation}</p>
-      ) : null}
-      {selectedFeatureLength ? <p className="mt-1">Length: {selectedFeatureLength}</p> : null}
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-sky-100 bg-white px-4 py-3 text-slate-600">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+          Selected Feature
+        </p>
+        <p className="mt-2 font-medium text-slate-900">{selectedFeature.geometry.type}</p>
+        <p className="mt-1">Vertices: {selectedVerticesCount}</p>
+        {selectedFeature.geometry.type === "Point" ? (
+          <p className="mt-1">Elevation: {selectedFeatureElevation}</p>
+        ) : null}
+        {selectedFeatureLength ? <p className="mt-1">Length: {selectedFeatureLength}</p> : null}
+        <div className="mt-3 flex gap-2">
+          <Button className="flex-1" onClick={onExport} variant="secondary">
+            Export
+          </Button>
+          <Button className="flex-1" onClick={onDelete} variant="ghost">
+            Delete
+          </Button>
+        </div>
+      </div>
+
       {selectedFeature.geometry.type === "LineString" && selectedVertexIndex !== null ? (
-        <>
-          <p className="mt-1 text-orange-600">Selected vertex: {selectedVertexIndex + 1}</p>
-          <p className="mt-1 text-orange-600">Elevation: {selectedVertexElevation ?? "unknown"}</p>
+        <div className="rounded-2xl border border-orange-200 bg-orange-50/70 px-4 py-3 text-orange-900">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">
+            Selected Vertex
+          </p>
+          <p className="mt-2 font-medium">Point {selectedVertexIndex + 1}</p>
+          <p className="mt-1">Elevation: {selectedVertexElevation ?? "unknown"}</p>
           {selectedVertexDistanceFromStart ? (
-            <p className="mt-1 text-orange-600">
-              Distance from start: {selectedVertexDistanceFromStart}
+            <p className="mt-1">Distance from start: {selectedVertexDistanceFromStart}</p>
+          ) : null}
+          {isLinking ? (
+            <p className="mt-2 rounded-xl border border-orange-200 bg-white/75 px-3 py-2 text-xs text-orange-700">
+              Link mode active. Click any LineString endpoint on the map.
             </p>
           ) : null}
-        </>
+          <div className="mt-3 flex gap-2">
+            {canLink ? (
+              <Button
+                aria-label="Link LineString"
+                className="shrink-0 px-3"
+                onClick={onLink}
+                title="Link LineString"
+                variant={isLinking ? "primary" : "secondary"}
+              >
+                <IconVectorSpline size={16} stroke={1.9} />
+              </Button>
+            ) : null}
+            {canSplit ? (
+              <Button
+                aria-label="Split LineString"
+                className="shrink-0 px-3"
+                onClick={onSplit}
+                title="Split LineString"
+                variant="secondary"
+              >
+                <IconCut size={16} stroke={1.9} />
+              </Button>
+            ) : null}
+            <Button className="px-3" onClick={onDeleteVertex} variant="secondary">
+              <IconTrash size={15} stroke={1.9} />
+            </Button>
+          </div>
+        </div>
       ) : null}
-      <div className="mt-3 flex gap-2">
-        <Button className="flex-1" onClick={onExport} variant="secondary">
-          Export
-        </Button>
-        <Button className="flex-1" onClick={onDelete} variant="ghost">
-          Delete
-        </Button>
-      </div>
     </div>
   );
 }

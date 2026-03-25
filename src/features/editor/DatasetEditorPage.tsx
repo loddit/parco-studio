@@ -25,13 +25,16 @@ import {
   formatLineLength,
   getFeatureBounds,
   getClickedFeatureId,
+  getLinkableLineEndpoints,
   getFeatureMidpoints,
   getFeatureVertices,
   getLineDistanceToVertex,
   HISTORY_LIMIT,
   insertFeatureVertexAtMidpoint,
   isTypingTarget,
+  linkLineFeaturesAtEndpoints,
   removeFeatureVertex,
+  splitLineFeatureAtVertex,
   updateFeatureVertex,
 } from "./editor-helpers";
 import { exportLineStringToGpx, parseGpx } from "./gpx";
@@ -68,10 +71,15 @@ export function DatasetEditorPage() {
   const [isDraggingVertex, setIsDraggingVertex] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFileName, setExportFileName] = useState("");
+  const [pendingLinkEndpoint, setPendingLinkEndpoint] = useState<{
+    featureId: string;
+    vertexIndex: number;
+  } | null>(null);
 
   function resetSelectionState() {
     setSelectedFeatureId(null);
     setSelectedVertexIndex(null);
+    setPendingLinkEndpoint(null);
   }
 
   function resetDraftState() {
@@ -192,6 +200,7 @@ export function DatasetEditorPage() {
     const coordinate: LngLat = [event.lngLat.lng, event.lngLat.lat];
 
     if (mode === "select") {
+      setPendingLinkEndpoint(null);
       setSelectedFeatureId(getClickedFeatureId(event));
       setSelectedVertexIndex(null);
       return;
@@ -272,6 +281,7 @@ export function DatasetEditorPage() {
     });
     setSelectedFeatureId(null);
     setSelectedVertexIndex(null);
+    setPendingLinkEndpoint(null);
   }
 
   function handleVertexDrag(featureId: string, vertexIndex: number, coordinate: LngLat) {
@@ -290,6 +300,7 @@ export function DatasetEditorPage() {
     vertexIndex: number,
   ) {
     event.originalEvent.stopPropagation();
+    setPendingLinkEndpoint(null);
     setSelectedFeatureId(featureId);
     setSelectedVertexIndex(vertexIndex);
   }
@@ -304,6 +315,7 @@ export function DatasetEditorPage() {
       nextFeatures.features.find((feature) => String(feature.id) === selectedFeatureId) ?? null;
 
     commitFeatureChange(nextFeatures);
+    setPendingLinkEndpoint(null);
 
     if (!nextFeature || nextFeature.geometry.type === "Point") {
       setSelectedVertexIndex(null);
@@ -312,6 +324,64 @@ export function DatasetEditorPage() {
 
     const nextVertexCount = getFeatureVertices(nextFeature).length;
     setSelectedVertexIndex(nextVertexCount === 0 ? null : Math.min(selectedVertexIndex, nextVertexCount - 1));
+  }
+
+  function handleSplitSelectedLineString() {
+    if (!selectedFeatureId || selectedVertexIndex === null || selectedFeature?.geometry.type !== "LineString") {
+      return;
+    }
+
+    const selectedFeaturePosition = features.features.findIndex(
+      (feature) => String(feature.id) === selectedFeatureId,
+    );
+    const nextFeatures = splitLineFeatureAtVertex(features, selectedFeatureId, selectedVertexIndex);
+
+    commitFeatureChange(nextFeatures);
+    setPendingLinkEndpoint(null);
+    setSelectedVertexIndex(null);
+    setSelectedFeatureId(
+      selectedFeaturePosition >= 0 ? String(nextFeatures.features[selectedFeaturePosition]?.id ?? null) : null,
+    );
+  }
+
+  function handleToggleLinkSelectedLineString() {
+    if (!selectedFeatureId || selectedVertexIndex === null) {
+      return;
+    }
+
+    setPendingLinkEndpoint((current) =>
+      current?.featureId === selectedFeatureId && current.vertexIndex === selectedVertexIndex
+        ? null
+        : {
+            featureId: selectedFeatureId,
+            vertexIndex: selectedVertexIndex,
+          },
+    );
+  }
+
+  function handleLinkEndpointClick(featureId: string, vertexIndex: number) {
+    if (!pendingLinkEndpoint) {
+      setSelectedFeatureId(featureId);
+      setSelectedVertexIndex(vertexIndex);
+      return;
+    }
+
+    const nextFeatures = linkLineFeaturesAtEndpoints(
+      features,
+      pendingLinkEndpoint.featureId,
+      pendingLinkEndpoint.vertexIndex,
+      featureId,
+      vertexIndex,
+    );
+
+    if (JSON.stringify(nextFeatures) === JSON.stringify(features)) {
+      return;
+    }
+
+    commitFeatureChange(nextFeatures);
+    setPendingLinkEndpoint(null);
+    setSelectedFeatureId(pendingLinkEndpoint.featureId);
+    setSelectedVertexIndex(null);
   }
 
   function handleVertexDragStart() {
@@ -402,6 +472,22 @@ export function DatasetEditorPage() {
       : "unknown";
   const selectedVertexElevation =
     selectedVertexIndex !== null ? formatCoordinateElevation(selectedVertices[selectedVertexIndex]) : null;
+  const linkableLineEndpoints = getLinkableLineEndpoints(features);
+  const canSplitSelectedLineString =
+    selectedFeature?.geometry.type === "LineString" &&
+    selectedVertexIndex !== null &&
+    ((selectedVertices.length >= 3 &&
+      JSON.stringify(selectedVertices[0]) === JSON.stringify(selectedVertices[selectedVertices.length - 1]) &&
+      (selectedVertexIndex === 0 || selectedVertexIndex === selectedVertices.length - 1)) ||
+      (selectedVertexIndex > 0 && selectedVertexIndex < selectedVertices.length - 2));
+  const canLinkSelectedLineString =
+    selectedFeature?.geometry.type === "LineString" &&
+    selectedVertexIndex !== null &&
+    (selectedVertexIndex === 0 || selectedVertexIndex === selectedVertices.length - 1);
+  const isLinkingSelectedLineString =
+    canLinkSelectedLineString &&
+    pendingLinkEndpoint?.featureId === selectedFeatureId &&
+    pendingLinkEndpoint.vertexIndex === selectedVertexIndex;
   const isDirty =
     !dataset ||
     JSON.stringify(dataset.features) !== JSON.stringify(features) ||
@@ -531,8 +617,11 @@ export function DatasetEditorPage() {
         mapActions={mapActions}
         mapState={mapState}
         mode={mode}
+        onLinkSelectedLineString={handleToggleLinkSelectedLineString}
+        onDeleteSelectedVertex={handleDeleteSelectedVertex}
         onDeleteSelectedFeature={handleDeleteSelectedFeature}
         onExportSelectedFeature={handleExportSelectedFeature}
+        onSplitSelectedLineString={handleSplitSelectedLineString}
         onImportFileChange={handleImportFile}
         onModeChange={handleModeChange}
         onOpenImport={() => importInputRef.current?.click()}
@@ -545,6 +634,9 @@ export function DatasetEditorPage() {
         selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
         selectedVertexIndex={selectedVertexIndex}
         selectedVerticesCount={selectedVertices.length}
+        canSplitSelectedLineString={canSplitSelectedLineString}
+        canLinkSelectedLineString={Boolean(canLinkSelectedLineString)}
+        isLinkingSelectedLineString={Boolean(isLinkingSelectedLineString)}
       />
 
       <section className="min-w-0 flex-1">
@@ -572,11 +664,14 @@ export function DatasetEditorPage() {
             onMapClick={handleMapClick}
             onMapHover={setHoverCoordinate}
             onInsertVertex={handleInsertVertex}
+            onLinkEndpointClick={handleLinkEndpointClick}
             onSelectVertex={handleSelectVertex}
             onVertexDrag={handleVertexDrag}
             onVertexDragEnd={handleVertexDragEnd}
             onVertexDragStart={handleVertexDragStart}
+            pendingLinkEndpoint={pendingLinkEndpoint}
             selectedFeatureId={selectedFeatureId}
+            linkableLineEndpoints={linkableLineEndpoints}
             selectedMidpoints={selectedMidpoints}
             selectedVertexIndex={selectedVertexIndex}
             selectedVertices={selectedVertices}

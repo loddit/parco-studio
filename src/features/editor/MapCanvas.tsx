@@ -15,6 +15,7 @@ import {
   buildRenderableFeatures,
   getClickedFeatureId,
   getMapCursor,
+  type LinkableLineEndpoint,
 } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
 import type { EditorMapStyle } from "./map-config";
@@ -188,6 +189,7 @@ export type MapCanvasProps = {
   hoverCoordinate: LngLat | null;
   isDraggingVertex: boolean;
   isHoveringSelectableFeature: boolean;
+  linkableLineEndpoints: LinkableLineEndpoint[];
   mapActions: Pick<EditorMapActions, "setMapStyle" | "setPendingFitBounds" | "setViewport">;
   mapState: Pick<
     EditorMapState,
@@ -202,6 +204,7 @@ export type MapCanvasProps = {
   onCloseDraftLineLoop: () => void;
   onFeatureClick: (featureId: string | null) => void;
   onFinalizeDraft: () => void;
+  onLinkEndpointClick: (featureId: string, vertexIndex: number) => void;
   onMapClick: (event: MapCanvasLayerMouseEvent) => void;
   onMapHover: (coordinate: LngLat | null) => void;
   onInsertVertex: (featureId: string, segmentIndex: number) => void;
@@ -209,6 +212,7 @@ export type MapCanvasProps = {
   onVertexDrag: (featureId: string, vertexIndex: number, coordinate: LngLat) => void;
   onVertexDragEnd: (featureId: string, vertexIndex: number, coordinate: LngLat) => void;
   onVertexDragStart: () => void;
+  pendingLinkEndpoint: { featureId: string; vertexIndex: number } | null;
   selectedFeatureId: string | null;
   selectedMidpoints: Array<{ coordinate: LngLat; segmentIndex: number }>;
   selectedVertexIndex: number | null;
@@ -233,12 +237,14 @@ function MapGLCanvas({
   hoverCoordinate,
   isDraggingVertex,
   isHoveringSelectableFeature,
+  linkableLineEndpoints,
   mapActions,
   mapState,
   mode,
   onCloseDraftLineLoop,
   onFeatureClick,
   onFinalizeDraft,
+  onLinkEndpointClick,
   onMapClick,
   onMapHover,
   onInsertVertex,
@@ -246,6 +252,7 @@ function MapGLCanvas({
   onVertexDrag,
   onVertexDragEnd,
   onVertexDragStart,
+  pendingLinkEndpoint,
   selectedFeatureId,
   selectedMidpoints,
   selectedVertexIndex,
@@ -256,6 +263,7 @@ function MapGLCanvas({
   const center = mapState.viewport.center;
   const zoom = mapState.viewport.zoomLevel;
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const isLinkModeActive = pendingLinkEndpoint !== null;
 
   const handleLocationSelect = useCallback(
     ({ center: locationCenter, bounds }: { center: LngLat; bounds?: LngLatBounds }) => {
@@ -410,13 +418,19 @@ function MapGLCanvas({
               ))}
               {selectedVertices.map((vertex, index) => (
                 <Marker
-                  draggable
+                  draggable={!isLinkModeActive}
                   key={`${selectedFeatureId}-${index}`}
                   latitude={vertex[1]}
                   longitude={vertex[0]}
-                  onClick={(event: MapGLMarkerEvent) =>
-                    onSelectVertex(event as unknown as MapCanvasMarkerEvent, selectedFeatureId, index)
-                  }
+                  onClick={(event: MapGLMarkerEvent) => {
+                    if (isLinkModeActive && (index === 0 || index === selectedVertices.length - 1)) {
+                      event.originalEvent.stopPropagation();
+                      onLinkEndpointClick(selectedFeatureId, index);
+                      return;
+                    }
+
+                    onSelectVertex(event as unknown as MapCanvasMarkerEvent, selectedFeatureId, index);
+                  }}
                   onDragStart={onVertexDragStart}
                   onDrag={(event: { lngLat: { lng: number; lat: number } }) => {
                     onVertexDrag(selectedFeatureId, index, [event.lngLat.lng, event.lngLat.lat]);
@@ -437,6 +451,43 @@ function MapGLCanvas({
               ))}
             </>
           ) : null}
+          {mode === "select" && isLinkModeActive
+            ? linkableLineEndpoints
+                .filter(
+                  (endpoint) =>
+                    endpoint.featureId !== selectedFeatureId ||
+                    !selectedVertices.some(
+                      (_, index) =>
+                        index === endpoint.vertexIndex &&
+                        (index === 0 || index === selectedVertices.length - 1),
+                    ),
+                )
+                .map((endpoint) => {
+                  const isSource =
+                    pendingLinkEndpoint.featureId === endpoint.featureId &&
+                    pendingLinkEndpoint.vertexIndex === endpoint.vertexIndex;
+
+                  return (
+                    <Marker
+                      key={`link-endpoint-${endpoint.featureId}-${endpoint.vertexIndex}`}
+                      latitude={endpoint.coordinate[1]}
+                      longitude={endpoint.coordinate[0]}
+                      onClick={(event: MapGLMarkerEvent) => {
+                        event.originalEvent.stopPropagation();
+                        onLinkEndpointClick(endpoint.featureId, endpoint.vertexIndex);
+                      }}
+                    >
+                      <div
+                        className={
+                          isSource
+                            ? "h-4 w-4 rounded-full border-2 border-white bg-sky-600 shadow-lg ring-4 ring-sky-200/80"
+                            : "h-3 w-3 rounded-full border-2 border-white bg-sky-500 shadow-lg ring-2 ring-sky-100/90"
+                        }
+                      />
+                    </Marker>
+                  );
+                })
+            : null}
           <NavigationControl position="top-right" />
         </Map>
       </MapGLProvider>

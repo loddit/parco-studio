@@ -41,11 +41,13 @@ export function GoogleMapCanvas({
   hoverCoordinate,
   isDraggingVertex,
   isHoveringSelectableFeature,
+  linkableLineEndpoints,
   mapActions,
   mapState,
   mode,
   onCloseDraftLineLoop,
   onFinalizeDraft,
+  onLinkEndpointClick,
   onMapClick,
   onMapHover,
   onInsertVertex,
@@ -53,6 +55,7 @@ export function GoogleMapCanvas({
   onVertexDrag,
   onVertexDragEnd,
   onVertexDragStart,
+  pendingLinkEndpoint,
   selectedFeatureId,
   selectedMidpoints,
   selectedVertexIndex,
@@ -62,6 +65,7 @@ export function GoogleMapCanvas({
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? "";
   const googleMapsId = import.meta.env.VITE_GOOGLE_MAPS_ID?.trim() ?? "";
   const googleMapsZoomLevel = mapState.viewport.zoomLevel + GOOGLE_MAPS_ZOOM_OFFSET;
+  const isLinkModeActive = pendingLinkEndpoint !== null;
   const renderedFeatures = useMemo(
     () => buildRenderableFeatures(features, selectedFeatureId),
     [features, selectedFeatureId],
@@ -196,9 +200,15 @@ export function GoogleMapCanvas({
                 <AdvancedMarker
                   anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
                   clickable
-                  draggable
+                  draggable={!isLinkModeActive}
                   key={`${selectedFeatureId}-${index}`}
                   onClick={(event) => {
+                    if (isLinkModeActive && (index === 0 || index === selectedVertices.length - 1)) {
+                      event.domEvent?.stopPropagation?.();
+                      onLinkEndpointClick(selectedFeatureId, index);
+                      return;
+                    }
+
                     onSelectVertex(createMarkerEvent(event.domEvent), selectedFeatureId, index);
                   }}
                   onDrag={(event) => {
@@ -234,6 +244,44 @@ export function GoogleMapCanvas({
               ))}
             </>
           ) : null}
+          {mode === "select" && isLinkModeActive
+            ? linkableLineEndpoints
+                .filter(
+                  (endpoint) =>
+                    endpoint.featureId !== selectedFeatureId ||
+                    !selectedVertices.some(
+                      (_, index) =>
+                        index === endpoint.vertexIndex &&
+                        (index === 0 || index === selectedVertices.length - 1),
+                    ),
+                )
+                .map((endpoint) => {
+                  const isSource =
+                    pendingLinkEndpoint.featureId === endpoint.featureId &&
+                    pendingLinkEndpoint.vertexIndex === endpoint.vertexIndex;
+
+                  return (
+                    <AdvancedMarker
+                      anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
+                      clickable
+                      key={`link-endpoint-${endpoint.featureId}-${endpoint.vertexIndex}`}
+                      onClick={(event) => {
+                        event.domEvent?.stopPropagation?.();
+                        onLinkEndpointClick(endpoint.featureId, endpoint.vertexIndex);
+                      }}
+                      position={{ lat: endpoint.coordinate[1], lng: endpoint.coordinate[0] }}
+                    >
+                      <div
+                        className={
+                          isSource
+                            ? "h-4 w-4 rounded-full border-2 border-white bg-sky-600 shadow-lg ring-4 ring-sky-200/80"
+                            : "h-3 w-3 rounded-full border-2 border-white bg-sky-500 shadow-lg ring-2 ring-sky-100/90"
+                        }
+                      />
+                    </AdvancedMarker>
+                  );
+                })
+            : null}
         </Map>
       </APIProvider>
     </div>

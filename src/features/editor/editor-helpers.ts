@@ -17,6 +17,12 @@ type ClickedFeatureEvent = {
   features?: Array<{ properties?: Record<string, unknown> | null }>;
 };
 
+export type LinkableLineEndpoint = {
+  coordinate: LngLat;
+  featureId: string;
+  vertexIndex: number;
+};
+
 export const FALLBACK_CENTER = { lat: 31.2304, lng: 121.4737 };
 export const FALLBACK_ZOOM = 10;
 export const HISTORY_LIMIT = 100;
@@ -185,6 +191,33 @@ export function getFeatureMidpoints(feature: Feature<DatasetGeometry>) {
   }));
 }
 
+export function getLinkableLineEndpoints(collection: DatasetFeatureCollection): LinkableLineEndpoint[] {
+  return collection.features.flatMap((feature) => {
+    if (feature.geometry.type !== "LineString") {
+      return [];
+    }
+
+    const coordinates = feature.geometry.coordinates as LngLat[];
+
+    if (coordinates.length < 2) {
+      return [];
+    }
+
+    return [
+      {
+        coordinate: coordinates[0],
+        featureId: String(feature.id),
+        vertexIndex: 0,
+      },
+      {
+        coordinate: coordinates[coordinates.length - 1],
+        featureId: String(feature.id),
+        vertexIndex: coordinates.length - 1,
+      },
+    ];
+  });
+}
+
 export function updateFeatureVertex(
   collection: DatasetFeatureCollection,
   featureId: string,
@@ -330,6 +363,145 @@ export function removeFeatureVertex(
   };
 }
 
+export function splitLineFeatureAtVertex(
+  collection: DatasetFeatureCollection,
+  featureId: string,
+  vertexIndex: number,
+): DatasetFeatureCollection {
+  return {
+    ...collection,
+    features: collection.features.flatMap((feature) => {
+      if (String(feature.id) !== featureId || feature.geometry.type !== "LineString") {
+        return [feature];
+      }
+
+      const coordinates = feature.geometry.coordinates as LngLat[];
+      const isClosedLoop =
+        coordinates.length >= 3 && coordinatesMatch(coordinates[0] as LngLat, coordinates[coordinates.length - 1] as LngLat);
+
+      if (isClosedLoop && (vertexIndex === 0 || vertexIndex === coordinates.length - 1)) {
+        return [
+          ({
+            ...feature,
+            geometry: {
+              type: "LineString",
+              coordinates: coordinates.slice(0, -1),
+            },
+          } satisfies Feature<LineString>),
+        ];
+      }
+
+      const firstSegment = coordinates.slice(0, vertexIndex + 1);
+      const secondSegment = coordinates.slice(vertexIndex + 1);
+
+      if (firstSegment.length < 2 || secondSegment.length < 2) {
+        return [feature];
+      }
+
+      return [
+        ({
+          ...feature,
+          id: createFeatureId(),
+          geometry: {
+            type: "LineString",
+            coordinates: firstSegment,
+          },
+        } satisfies Feature<LineString>),
+        ({
+          ...feature,
+          id: createFeatureId(),
+          geometry: {
+            type: "LineString",
+            coordinates: secondSegment,
+          },
+        } satisfies Feature<LineString>),
+      ];
+    }),
+  };
+}
+
+export function linkLineFeaturesAtEndpoints(
+  collection: DatasetFeatureCollection,
+  sourceFeatureId: string,
+  sourceVertexIndex: number,
+  targetFeatureId: string,
+  targetVertexIndex: number,
+): DatasetFeatureCollection {
+  const sourceFeature = collection.features.find((feature) => String(feature.id) === sourceFeatureId);
+  const targetFeature = collection.features.find((feature) => String(feature.id) === targetFeatureId);
+
+  if (!sourceFeature || !targetFeature) {
+    return collection;
+  }
+
+  if (sourceFeature.geometry.type !== "LineString" || targetFeature.geometry.type !== "LineString") {
+    return collection;
+  }
+
+  const sourceCoordinates = sourceFeature.geometry.coordinates as LngLat[];
+  const targetCoordinates = targetFeature.geometry.coordinates as LngLat[];
+
+  if (!isLineEndpointIndex(sourceCoordinates, sourceVertexIndex) || !isLineEndpointIndex(targetCoordinates, targetVertexIndex)) {
+    return collection;
+  }
+
+  if (sourceFeatureId === targetFeatureId) {
+    if (coordinatesMatch(sourceCoordinates[0], sourceCoordinates[sourceCoordinates.length - 1])) {
+      return collection;
+    }
+
+    return {
+      ...collection,
+      features: collection.features.map((feature) =>
+        String(feature.id) !== sourceFeatureId
+          ? feature
+          : ({
+              ...feature,
+              geometry: {
+                type: "LineString",
+                coordinates: [...sourceCoordinates, sourceCoordinates[0]],
+              },
+            } satisfies Feature<LineString>),
+      ),
+    };
+  }
+
+  const orientedSourceCoordinates =
+    sourceVertexIndex === sourceCoordinates.length - 1 ? sourceCoordinates : [...sourceCoordinates].reverse();
+  const orientedTargetCoordinates =
+    targetVertexIndex === 0 ? targetCoordinates : [...targetCoordinates].reverse();
+
+  const mergedCoordinates = coordinatesMatch(
+    orientedSourceCoordinates[orientedSourceCoordinates.length - 1],
+    orientedTargetCoordinates[0],
+  )
+    ? [...orientedSourceCoordinates, ...orientedTargetCoordinates.slice(1)]
+    : [...orientedSourceCoordinates, ...orientedTargetCoordinates];
+
+  return {
+    ...collection,
+    features: collection.features.flatMap((feature) => {
+      if (String(feature.id) === targetFeatureId) {
+        return [];
+      }
+
+      if (String(feature.id) !== sourceFeatureId) {
+        return [feature];
+      }
+
+      return [
+        ({
+          ...feature,
+          geometry: {
+            type: "LineString",
+            coordinates: mergedCoordinates,
+          },
+        } satisfies Feature<LineString>),
+      ];
+    }),
+  };
+}
+
 export function extractSupportedFeatures(geojson: GeoJSON): Array<Feature<DatasetGeometry>> {
   if (geojson.type === "FeatureCollection") {
     return geojson.features.flatMap((feature) => extractFeature(feature));
@@ -348,6 +520,14 @@ export function extractSupportedFeatures(geojson: GeoJSON): Array<Feature<Datase
   }
 
   return [];
+}
+
+function isLineEndpointIndex(coordinates: LngLat[], vertexIndex: number) {
+  return vertexIndex === 0 || vertexIndex === coordinates.length - 1;
+}
+
+function coordinatesMatch(left: LngLat, right: LngLat) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function extractFeature(feature: Feature): Array<Feature<DatasetGeometry>> {
