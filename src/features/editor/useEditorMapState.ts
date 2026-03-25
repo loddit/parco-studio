@@ -5,9 +5,11 @@ import {
   getInitialMapStyle,
   getMapSourceOptions,
   getMapSourceRequirement,
+  getMapRenderer,
   getMapStyleOptions,
   resolveMapStyleUrl,
   type EditorMapSource,
+  type EditorMapRenderer,
   type EditorMapStyle,
 } from "./map-config";
 
@@ -24,6 +26,7 @@ export type EditorMapState = {
   mapStyle: EditorMapStyle;
   mapStyleOptions: Array<{ value: string; label: string }>;
   mapStyleUrl: string;
+  mapRenderer: EditorMapRenderer;
   pendingFitBounds: LngLatBounds | null;
   selectedMapSourceRequirement: string | null;
   viewport: EditorMapViewport;
@@ -65,6 +68,7 @@ export function useEditorMapState({
     mapStyle,
     mapStyleOptions: getMapStyleOptions(mapSource),
     mapStyleUrl: resolveMapStyleUrl(mapSource, mapStyle),
+    mapRenderer: getMapRenderer(mapSource),
     pendingFitBounds,
     selectedMapSourceRequirement: getMapSourceRequirement(mapSource),
     viewport,

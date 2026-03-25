@@ -7,27 +7,6 @@ import {
   IconSun,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import MapboxMap, {
-  Layer as MapboxLayer,
-  Marker as MapboxMarker,
-  NavigationControl as MapboxNavigationControl,
-  Source as MapboxSource,
-  type LayerProps as MapboxLayerProps,
-  type MapMouseEvent as MapboxLayerMouseEvent,
-  type MapRef as MapboxMapRef,
-  type MarkerEvent as MapboxMarkerEvent,
-} from "react-map-gl/mapbox";
-import MapLibreMap, {
-  Layer as MapLibreLayer,
-  Marker as MapLibreMarker,
-  NavigationControl as MapLibreNavigationControl,
-  Source as MapLibreSource,
-  type LayerProps as MapLibreLayerProps,
-  type MapLayerMouseEvent as MapLibreLayerMouseEvent,
-  type MapRef as MapLibreMapRef,
-  type MarkerEvent as MapLibreMarkerEvent,
-} from "react-map-gl/maplibre";
-import maplibregl from "maplibre-gl";
 import { Button } from "@/components/Button";
 import { GeocodingBar } from "./GeocodingBar";
 import type { DatasetFeatureCollection, LngLat, LngLatBounds } from "@/types/dataset";
@@ -38,11 +17,21 @@ import {
   getMapCursor,
 } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
+import type { EditorMapStyle } from "./map-config";
+import { GoogleMapCanvas } from "./GoogleMapCanvas";
 import {
-  getMapboxAccessToken,
-  getMapRenderer,
-  type EditorMapStyle,
-} from "./map-config";
+  Layer,
+  Map,
+  MapGLProvider,
+  type MapGLMapProps,
+  Marker,
+  NavigationControl,
+  Source,
+  type MapGLLayerMouseEvent,
+  type MapGLLayerProps,
+  type MapGLMapRef,
+  type MapGLMarkerEvent,
+} from "./mapGL";
 import type { EditorMapActions, EditorMapState } from "./useEditorMapState";
 
 const FEATURE_SOURCE_ID = "dataset-features";
@@ -78,30 +67,28 @@ const MAP_STYLE_ICON_MAP = {
   light: IconSun,
 } as const;
 
-type SharedLayerProps = MapboxLayerProps | MapLibreLayerProps;
-
-const FEATURE_FILL_LAYER: SharedLayerProps = {
+const FEATURE_FILL_LAYER: MapGLLayerProps<"fill"> = {
   id: FEATURE_FILL_LAYER_ID,
   type: "fill",
   filter: ["all", ["==", ["geometry-type"], "Polygon"], ["!=", ["get", "isSelected"], true]],
   paint: { "fill-color": "#0ea5e9", "fill-opacity": 0.18 },
 };
 
-const FEATURE_LINE_HIT_LAYER: SharedLayerProps = {
+const FEATURE_LINE_HIT_LAYER: MapGLLayerProps<"line"> = {
   id: FEATURE_LINE_HIT_LAYER_ID,
   type: "line",
   filter: ["all", ["==", ["geometry-type"], "LineString"], ["!=", ["get", "isSelected"], true]],
   paint: { "line-color": "#000000", "line-opacity": 0.01, "line-width": 14 },
 };
 
-const FEATURE_LINE_LAYER: SharedLayerProps = {
+const FEATURE_LINE_LAYER: MapGLLayerProps<"line"> = {
   id: FEATURE_LINE_LAYER_ID,
   type: "line",
   filter: ["all", ["==", ["geometry-type"], "LineString"], ["!=", ["get", "isSelected"], true]],
   paint: { "line-color": "#0284c7", "line-width": 2 },
 };
 
-const FEATURE_POINT_LAYER: SharedLayerProps = {
+const FEATURE_POINT_LAYER: MapGLLayerProps<"circle"> = {
   id: FEATURE_POINT_LAYER_ID,
   type: "circle",
   filter: ["all", ["==", ["geometry-type"], "Point"], ["!=", ["get", "isSelected"], true]],
@@ -113,14 +100,14 @@ const FEATURE_POINT_LAYER: SharedLayerProps = {
   },
 };
 
-const SELECTED_FILL_LAYER: SharedLayerProps = {
+const SELECTED_FILL_LAYER: MapGLLayerProps<"fill"> = {
   id: SELECTED_FILL_LAYER_ID,
   type: "fill",
   filter: ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "isSelected"], true]],
   paint: { "fill-color": "#f97316", "fill-opacity": 0.18 },
 };
 
-const SELECTED_LINE_HIT_LAYER: SharedLayerProps = {
+const SELECTED_LINE_HIT_LAYER: MapGLLayerProps<"line"> = {
   id: SELECTED_LINE_HIT_LAYER_ID,
   type: "line",
   filter: [
@@ -131,7 +118,7 @@ const SELECTED_LINE_HIT_LAYER: SharedLayerProps = {
   paint: { "line-color": "#000000", "line-opacity": 0.01, "line-width": 16 },
 };
 
-const SELECTED_LINE_LAYER: SharedLayerProps = {
+const SELECTED_LINE_LAYER: MapGLLayerProps<"line"> = {
   id: SELECTED_LINE_LAYER_ID,
   type: "line",
   filter: [
@@ -142,7 +129,7 @@ const SELECTED_LINE_LAYER: SharedLayerProps = {
   paint: { "line-color": "#f97316", "line-width": 3 },
 };
 
-const SELECTED_POINT_LAYER: SharedLayerProps = {
+const SELECTED_POINT_LAYER: MapGLLayerProps<"circle"> = {
   id: SELECTED_POINT_LAYER_ID,
   type: "circle",
   filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "isSelected"], true]],
@@ -154,14 +141,14 @@ const SELECTED_POINT_LAYER: SharedLayerProps = {
   },
 };
 
-const DRAFT_FILL_LAYER: SharedLayerProps = {
+const DRAFT_FILL_LAYER: MapGLLayerProps<"fill"> = {
   id: DRAFT_FILL_LAYER_ID,
   type: "fill",
   filter: ["==", ["geometry-type"], "Polygon"],
   paint: { "fill-color": "#f59e0b", "fill-opacity": 0.14 },
 };
 
-const DRAFT_LINE_LAYER: SharedLayerProps = {
+const DRAFT_LINE_LAYER: MapGLLayerProps<"line"> = {
   id: DRAFT_LINE_LAYER_ID,
   type: "line",
   filter: ["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]],
@@ -172,7 +159,7 @@ const DRAFT_LINE_LAYER: SharedLayerProps = {
   },
 };
 
-const DRAFT_POINT_LAYER: SharedLayerProps = {
+const DRAFT_POINT_LAYER: MapGLLayerProps<"circle"> = {
   id: DRAFT_POINT_LAYER_ID,
   type: "circle",
   filter: ["==", ["geometry-type"], "Point"],
@@ -184,12 +171,18 @@ const DRAFT_POINT_LAYER: SharedLayerProps = {
   },
 };
 
-export type MapCanvasLayerMouseEvent = MapboxLayerMouseEvent | MapLibreLayerMouseEvent;
-export type MapCanvasMarkerEvent =
-  | MapboxMarkerEvent<MouseEvent>
-  | MapLibreMarkerEvent<MouseEvent>;
+export type MapCanvasLayerMouseEvent = {
+  features?: Array<{ properties?: Record<string, unknown> | null }>;
+  lngLat: { lat: number; lng: number };
+  originalEvent: { detail: number; preventDefault: () => void };
+  preventDefault: () => void;
+};
 
-type MapCanvasProps = {
+export type MapCanvasMarkerEvent = {
+  originalEvent: { stopPropagation: () => void };
+};
+
+export type MapCanvasProps = {
   draftCoordinates: LngLat[];
   features: DatasetFeatureCollection;
   hoverCoordinate: LngLat | null;
@@ -200,7 +193,7 @@ type MapCanvasProps = {
     EditorMapState,
     | "isBearingEnabled"
     | "isPitchEnabled"
-    | "mapSource"
+    | "mapRenderer"
     | "mapStyle"
     | "mapStyleOptions"
     | "mapStyleUrl"
@@ -226,6 +219,17 @@ type MapCanvasProps = {
 };
 
 export function MapCanvas({
+  mapState,
+  ...props
+}: MapCanvasProps) {
+  if (mapState.mapRenderer === "google") {
+    return <GoogleMapCanvas {...props} mapState={mapState} />;
+  }
+
+  return <MapGLCanvas {...props} mapState={mapState} />;
+}
+
+function MapGLCanvas({
   draftCoordinates,
   features,
   hoverCoordinate,
@@ -250,7 +254,7 @@ export function MapCanvas({
   selectedVertices,
   setIsHoveringSelectableFeature,
 }: MapCanvasProps) {
-  const mapRef = useRef<MapboxMapRef | MapLibreMapRef | null>(null);
+  const mapGLRef = useRef<MapGLMapRef | null>(null);
   const center = mapState.viewport.center;
   const zoom = mapState.viewport.zoomLevel;
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -277,29 +281,21 @@ export function MapCanvas({
     () => buildDraftFeatures(mode, draftCoordinates, hoverCoordinate),
     [draftCoordinates, hoverCoordinate, mode],
   );
-  const isMapbox = getMapRenderer(mapState.mapSource) === "mapbox";
+  const isMapbox = mapState.mapRenderer === "mapbox";
 
   useEffect(() => {
-    if (!mapState.pendingFitBounds || !mapRef.current) {
+    if (!mapState.pendingFitBounds || !mapGLRef.current) {
       return;
     }
 
-    mapRef.current.fitBounds(mapState.pendingFitBounds, {
+    mapGLRef.current.fitBounds(mapState.pendingFitBounds, {
       padding: 64,
       duration: 800,
     });
     mapActions.setPendingFitBounds(null);
   }, [mapActions, mapState.pendingFitBounds]);
 
-  const MapComponent: any = isMapbox ? MapboxMap : MapLibreMap;
-  const LayerComponent: any = isMapbox ? MapboxLayer : MapLibreLayer;
-  const MarkerComponent: any = isMapbox ? MapboxMarker : MapLibreMarker;
-  const NavigationControlComponent: any = isMapbox
-    ? MapboxNavigationControl
-    : MapLibreNavigationControl;
-  const SourceComponent: any = isMapbox ? MapboxSource : MapLibreSource;
-  const mapProps: Record<string, unknown> = {
-    ref: mapRef,
+  const mapProps: MapGLMapProps = {
     latitude: center[1],
     longitude: center[0],
     zoom,
@@ -308,13 +304,13 @@ export function MapCanvas({
     doubleClickZoom: true,
     dragPan: !isDraggingVertex,
     interactiveLayerIds: INTERACTIVE_LAYER_IDS,
-    onClick: (event: MapCanvasLayerMouseEvent) => {
-      onMapClick(event);
+    onClick: (event: MapGLLayerMouseEvent) => {
+      onMapClick(event as unknown as MapCanvasLayerMouseEvent);
       if (mode === "select" && !getClickedFeatureId(event)) {
         onFeatureClick(null);
       }
     },
-    onDblClick: (event: MapCanvasLayerMouseEvent) => {
+    onDblClick: (event: MapGLLayerMouseEvent) => {
       const clickedFeatureId = getClickedFeatureId(event);
 
       if (mode === "draw-line" || mode === "draw-polygon") {
@@ -329,7 +325,7 @@ export function MapCanvas({
         event.originalEvent.preventDefault();
       }
     },
-    onMouseMove: (event: MapCanvasLayerMouseEvent) => {
+    onMouseMove: (event: MapGLLayerMouseEvent) => {
       if (mode === "select") {
         setIsHoveringSelectableFeature(Boolean(getClickedFeatureId(event)));
         return;
@@ -368,86 +364,84 @@ export function MapCanvas({
     });
   }
 
-  if (isMapbox) {
-    mapProps.mapboxAccessToken = getMapboxAccessToken();
-  } else {
-    mapProps.mapLib = maplibregl;
-  }
-
   return (
     <div className="relative h-full min-h-screen">
-      <MapComponent {...mapProps}>
-        <SourceComponent data={renderedFeatures} id={FEATURE_SOURCE_ID} type="geojson">
-          <LayerComponent {...FEATURE_LINE_HIT_LAYER} />
-          <LayerComponent {...FEATURE_FILL_LAYER} />
-          <LayerComponent {...FEATURE_LINE_LAYER} />
-          <LayerComponent {...FEATURE_POINT_LAYER} />
-          <LayerComponent {...SELECTED_FILL_LAYER} />
-          <LayerComponent {...SELECTED_LINE_HIT_LAYER} />
-          <LayerComponent {...SELECTED_LINE_LAYER} />
-          <LayerComponent {...SELECTED_POINT_LAYER} />
-        </SourceComponent>
-        <SourceComponent data={draftFeatures} id={DRAFT_SOURCE_ID} type="geojson">
-          <LayerComponent {...DRAFT_FILL_LAYER} />
-          <LayerComponent {...DRAFT_LINE_LAYER} />
-          <LayerComponent {...DRAFT_POINT_LAYER} />
-        </SourceComponent>
-        {mode === "draw-line" && draftCoordinates.length >= 2 ? (
-          <MarkerComponent
-            latitude={draftCoordinates[0][1]}
-            longitude={draftCoordinates[0][0]}
-            onClick={(event: MapCanvasMarkerEvent) => {
-              event.originalEvent.stopPropagation();
-              onCloseDraftLineLoop();
-            }}
-          >
-            <div className="h-3 w-3 rounded-full border border-amber-500 bg-amber-200 shadow-sm" />
-          </MarkerComponent>
-        ) : null}
-        {mode === "select" && selectedFeatureId ? (
-          <>
-            {selectedMidpoints.map((midpoint) => (
-              <MarkerComponent
-                key={`${selectedFeatureId}-midpoint-${midpoint.segmentIndex}`}
-                latitude={midpoint.coordinate[1]}
-                longitude={midpoint.coordinate[0]}
-                onClick={() => onInsertVertex(selectedFeatureId, midpoint.segmentIndex)}
-              >
-                <div
-                  className="h-[7px] w-[7px] rounded-full border border-orange-400 bg-orange-400/45 shadow-sm backdrop-blur-[1px]"
-                  onDoubleClick={(event) => event.stopPropagation()}
-                />
-              </MarkerComponent>
-            ))}
-            {selectedVertices.map((vertex, index) => (
-              <MarkerComponent
-                draggable
-                key={`${selectedFeatureId}-${index}`}
-                latitude={vertex[1]}
-                longitude={vertex[0]}
-                onClick={(event: MapCanvasMarkerEvent) => onSelectVertex(event, selectedFeatureId, index)}
-                onDragStart={onVertexDragStart}
-                onDrag={(event: { lngLat: { lng: number; lat: number } }) => {
-                  onVertexDrag(selectedFeatureId, index, [event.lngLat.lng, event.lngLat.lat]);
-                }}
-                onDragEnd={(event: { lngLat: { lng: number; lat: number } }) => {
-                  onVertexDragEnd(selectedFeatureId, index, [event.lngLat.lng, event.lngLat.lat]);
-                }}
-              >
-                <div
-                  className={
-                    index === selectedVertexIndex
-                      ? "h-3 w-3 rounded-full border border-white bg-orange-700 shadow-lg"
-                      : "h-2 w-2 rounded-full border border-white bg-orange-500 shadow-lg"
+      <MapGLProvider renderer={mapState.mapRenderer}>
+        <Map {...mapProps} ref={mapGLRef}>
+          <Source data={renderedFeatures} id={FEATURE_SOURCE_ID} type="geojson">
+            <Layer {...FEATURE_LINE_HIT_LAYER} />
+            <Layer {...FEATURE_FILL_LAYER} />
+            <Layer {...FEATURE_LINE_LAYER} />
+            <Layer {...FEATURE_POINT_LAYER} />
+            <Layer {...SELECTED_FILL_LAYER} />
+            <Layer {...SELECTED_LINE_HIT_LAYER} />
+            <Layer {...SELECTED_LINE_LAYER} />
+            <Layer {...SELECTED_POINT_LAYER} />
+          </Source>
+          <Source data={draftFeatures} id={DRAFT_SOURCE_ID} type="geojson">
+            <Layer {...DRAFT_FILL_LAYER} />
+            <Layer {...DRAFT_LINE_LAYER} />
+            <Layer {...DRAFT_POINT_LAYER} />
+          </Source>
+          {mode === "draw-line" && draftCoordinates.length >= 2 ? (
+            <Marker
+              latitude={draftCoordinates[0][1]}
+              longitude={draftCoordinates[0][0]}
+              onClick={(event: MapGLMarkerEvent) => {
+                event.originalEvent.stopPropagation();
+                onCloseDraftLineLoop();
+              }}
+            >
+              <div className="h-3 w-3 rounded-full border border-amber-500 bg-amber-200 shadow-sm" />
+            </Marker>
+          ) : null}
+          {mode === "select" && selectedFeatureId ? (
+            <>
+              {selectedMidpoints.map((midpoint) => (
+                <Marker
+                  key={`${selectedFeatureId}-midpoint-${midpoint.segmentIndex}`}
+                  latitude={midpoint.coordinate[1]}
+                  longitude={midpoint.coordinate[0]}
+                  onClick={() => onInsertVertex(selectedFeatureId, midpoint.segmentIndex)}
+                >
+                  <div
+                    className="h-[7px] w-[7px] rounded-full border border-orange-400 bg-orange-400/45 shadow-sm backdrop-blur-[1px]"
+                    onDoubleClick={(event) => event.stopPropagation()}
+                  />
+                </Marker>
+              ))}
+              {selectedVertices.map((vertex, index) => (
+                <Marker
+                  draggable
+                  key={`${selectedFeatureId}-${index}`}
+                  latitude={vertex[1]}
+                  longitude={vertex[0]}
+                  onClick={(event: MapGLMarkerEvent) =>
+                    onSelectVertex(event as unknown as MapCanvasMarkerEvent, selectedFeatureId, index)
                   }
-                  onDoubleClick={(event) => event.stopPropagation()}
-                />
-              </MarkerComponent>
-            ))}
-          </>
-        ) : null}
-        <NavigationControlComponent position="top-right" />
-      </MapComponent>
+                  onDragStart={onVertexDragStart}
+                  onDrag={(event: { lngLat: { lng: number; lat: number } }) => {
+                    onVertexDrag(selectedFeatureId, index, [event.lngLat.lng, event.lngLat.lat]);
+                  }}
+                  onDragEnd={(event: { lngLat: { lng: number; lat: number } }) => {
+                    onVertexDragEnd(selectedFeatureId, index, [event.lngLat.lng, event.lngLat.lat]);
+                  }}
+                >
+                  <div
+                    className={
+                      index === selectedVertexIndex
+                        ? "h-3 w-3 rounded-full border border-white bg-orange-700 shadow-lg"
+                        : "h-2 w-2 rounded-full border border-white bg-orange-500 shadow-lg"
+                    }
+                    onDoubleClick={(event) => event.stopPropagation()}
+                  />
+                </Marker>
+              ))}
+            </>
+          ) : null}
+          <NavigationControl position="top-right" />
+        </Map>
+      </MapGLProvider>
       <div className="pointer-events-none absolute left-3 top-2 z-10">
         <div className="pointer-events-auto flex items-start gap-2 px-2 py-2">
           <div className="flex items-center rounded-xl bg-white">

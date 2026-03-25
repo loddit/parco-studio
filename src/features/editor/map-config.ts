@@ -9,6 +9,16 @@ const MAP_SOURCE_CONFIG = {
       terrain: { label: "Terrain", url: "mapbox://styles/mapbox/outdoors-v12" },
     },
   },
+  google: {
+    label: "Google Maps",
+    renderer: "google",
+    envKey: "VITE_GOOGLE_MAPS_API_KEY",
+    styles: {
+      default: { label: "Default", url: "roadmap" },
+      satellite: { label: "Satellite", url: "satellite" },
+      terrain: { label: "Terrain", url: "terrain" },
+    },
+  },
   carto: {
     label: "Carto",
     renderer: "maplibre",
