@@ -491,24 +491,23 @@ function MapGLCanvas({
           <NavigationControl position="top-right" />
         </Map>
       </MapGLProvider>
-      <div className="pointer-events-none absolute left-3 top-2 z-10">
+      <div className="pointer-events-none absolute left-1 top-0 z-10">
         <div className="pointer-events-auto flex items-start gap-2 px-2 py-2">
           <div className="flex items-center rounded-xl bg-white">
             {mapState.mapStyleOptions.map((option) => {
               const Icon = MAP_STYLE_ICON_MAP[option.value as keyof typeof MAP_STYLE_ICON_MAP] ?? IconMap;
 
               return (
-                <Button
+                <button
                   className={`${
                     mapState.mapStyle === option.value ? "bg-slate-300" : "bg-white"
-                  } h-8 min-w-8 rounded-none border-y-2 border-l-2 border-slate-500/20 px-1.5 text-slate-900 shadow-none first:rounded-l-xl last:rounded-r-xl last:border-r-2 hover:bg-slate-100`}
+                  } h-9 min-w-9 rounded-none border-y-2 border-l-2 border-slate-500/20 px-1.5 text-slate-900 shadow-none first:rounded-l-xl last:rounded-r-xl last:border-r-2 hover:bg-slate-100 cursor-pointer`}
                   key={option.value}
                   onClick={() => mapActions.setMapStyle(option.value as EditorMapStyle)}
                   title={option.label}
-                  variant="ghost"
                 >
-                  <Icon size={18} stroke={1.9} />
-                </Button>
+                  <Icon size={20} stroke={2} />
+                </button>
               );
             })}
           </div>

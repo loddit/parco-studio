@@ -19,6 +19,7 @@ import type { FeatureCollection, Geometry } from "geojson";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { LngLat, LngLatBounds } from "@/types/dataset";
 import { buildDraftFeatures, buildRenderableFeatures, getMapCursor } from "./editor-helpers";
+import { GoogleGeocodingBar } from "./GoogleGeocodingBar";
 import type { MapCanvasLayerMouseEvent, MapCanvasMarkerEvent, MapCanvasProps } from "./MapCanvas";
 
 const MAP_STYLE_ICON_MAP = {
@@ -282,6 +283,11 @@ export function GoogleMapCanvas({
                   );
                 })
             : null}
+          <div className="pointer-events-none absolute left-54 top-2 z-10">
+            <div className="pointer-events-auto flex items-start gap-2 px-2 py-1">
+              <GoogleGeocodingBar onLocationSelect={handleLocationSelect} />
+            </div>
+          </div>
         </Map>
       </APIProvider>
     </div>
