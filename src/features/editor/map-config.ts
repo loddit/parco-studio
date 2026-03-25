@@ -1,4 +1,23 @@
 const MAP_SOURCE_CONFIG = {
+  carto: {
+    label: "Carto",
+    renderer: "maplibre",
+    envKey: undefined,
+    styles: {
+      default: {
+        label: "Default",
+        url: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+      },
+      dark: {
+        label: "Dark",
+        url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+      },
+      nature: {
+        label: "Nature",
+        url: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+      },
+    },
+  },
   mapbox: {
     label: "Mapbox",
     renderer: "mapbox",
@@ -19,25 +38,7 @@ const MAP_SOURCE_CONFIG = {
       terrain: { label: "Terrain", url: "terrain" },
     },
   },
-  carto: {
-    label: "Carto",
-    renderer: "maplibre",
-    envKey: undefined,
-    styles: {
-      default: {
-        label: "Default",
-        url: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-      },
-      dark: {
-        label: "Dark",
-        url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-      },
-      nature: {
-        label: "Nature",
-        url: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
-      },
-    },
-  },
+
   maptiler: {
     label: "MapTiler",
     renderer: "maplibre",
@@ -64,6 +65,16 @@ const MAP_SOURCE_CONFIG = {
       },
     },
   },
+  protomaps: {
+    label: "Protomaps",
+    renderer: "maplibre",
+    envKey: "VITE_PROTOMAPS_API_KEY",
+    styles: {
+      default: { label: "Default", url: "https://api.protomaps.com/styles/v5/light/en.json" },
+      dark: { label: "Dark", url: "https://api.protomaps.com/styles/v5/dark/en.json" },
+      light: { label: "Light", url: "https://api.protomaps.com/styles/v5/white/en.json" },
+    },
+  },
   others: {
     label: "Others",
     renderer: "maplibre",
@@ -77,16 +88,6 @@ const MAP_SOURCE_CONFIG = {
         label: "Satellite",
         url: "https://raw.githubusercontent.com/go2garret/maps/main/src/assets/json/arcgis_hybrid.json",
       },
-    },
-  },
-  protomaps: {
-    label: "Protomaps",
-    renderer: "maplibre",
-    envKey: "VITE_PROTOMAPS_API_KEY",
-    styles: {
-      default: { label: "Default", url: "https://api.protomaps.com/styles/v5/light/en.json" },
-      dark: { label: "Dark", url: "https://api.protomaps.com/styles/v5/dark/en.json" },
-      light: { label: "Light", url: "https://api.protomaps.com/styles/v5/white/en.json" },
     },
   },
 } as const;
