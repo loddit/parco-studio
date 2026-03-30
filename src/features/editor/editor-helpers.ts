@@ -643,6 +643,59 @@ export function formatLineLength(lengthInKilometers: number) {
   return `${lengthInKilometers.toFixed(2)} km`;
 }
 
+export function formatArea(areaInSquareMeters: number) {
+  if (areaInSquareMeters < 1_000_000) {
+    return `${Math.round(areaInSquareMeters)} m²`;
+  }
+
+  return `${(areaInSquareMeters / 1_000_000).toFixed(2)} km²`;
+}
+
+export function getLineLength(coordinates: LngLat[]) {
+  if (coordinates.length < 2) {
+    return 0;
+  }
+
+  return turfLength(
+    {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "LineString",
+        coordinates,
+      },
+    },
+    { units: "kilometers" },
+  );
+}
+
+export function getPolygonArea(coordinates: LngLat[]) {
+  if (coordinates.length < 3) {
+    return 0;
+  }
+
+  const ring = [...coordinates, coordinates[0]];
+  const earthRadiusInMeters = 6_378_137;
+  let sum = 0;
+
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const [startLongitude, startLatitude] = ring[index];
+    const [endLongitude, endLatitude] = ring[index + 1];
+    const startX = earthRadiusInMeters * ((startLongitude * Math.PI) / 180);
+    const endX = earthRadiusInMeters * ((endLongitude * Math.PI) / 180);
+    const startY =
+      earthRadiusInMeters *
+      Math.log(Math.tan(Math.PI / 4 + (((Math.max(-85, Math.min(85, startLatitude)) * Math.PI) / 180) / 2)));
+    const endY =
+      earthRadiusInMeters *
+      Math.log(Math.tan(Math.PI / 4 + (((Math.max(-85, Math.min(85, endLatitude)) * Math.PI) / 180) / 2)));
+
+    sum += startX * endY - endX * startY;
+  }
+
+  return Math.abs(sum) / 2;
+}
+
 export function getLineDistanceToVertex(feature: Feature<LineString>, vertexIndex: number) {
   if (vertexIndex <= 0) {
     return 0;

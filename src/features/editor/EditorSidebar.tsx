@@ -23,7 +23,9 @@ import { MapSettingsModal } from "./MapSettingsModal";
 
 type EditorSidebarProps = {
   datasetName: string;
+  draftArea: string | null;
   draftCount: number;
+  draftLength: string | null;
   featureCount: number;
   importInputRef: React.RefObject<HTMLInputElement | null>;
   isDirty: boolean;
@@ -42,6 +44,7 @@ type EditorSidebarProps = {
   onSave: () => void;
   selectedFeatureElevation: string;
   selectedFeature: Feature<DatasetGeometry> | null;
+  selectedFeatureArea: string | null;
   selectedFeatureLength: string | null;
   selectedVertexElevation: string | null;
   selectedVertexDistanceFromStart: string | null;
@@ -54,7 +57,9 @@ type EditorSidebarProps = {
 
 export function EditorSidebar({
   datasetName,
+  draftArea,
   draftCount,
+  draftLength,
   featureCount,
   importInputRef,
   isDirty,
@@ -73,6 +78,7 @@ export function EditorSidebar({
   onSave,
   selectedFeatureElevation,
   selectedFeature,
+  selectedFeatureArea,
   selectedFeatureLength,
   selectedVertexElevation,
   selectedVertexDistanceFromStart,
@@ -206,6 +212,7 @@ export function EditorSidebar({
               onSplit={onSplitSelectedLineString}
               selectedFeatureElevation={selectedFeatureElevation}
               selectedFeature={selectedFeature}
+              selectedFeatureArea={selectedFeatureArea}
               selectedFeatureLength={selectedFeatureLength}
               selectedVertexElevation={selectedVertexElevation}
               selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
@@ -224,7 +231,16 @@ export function EditorSidebar({
           )}
           {draftCount > 0 ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
-              Draft vertices: {draftCount}
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-500">
+                Draft Feature
+              </p>
+              <p className="mt-2 font-medium">{mode === "draw-polygon" ? "Polygon" : "LineString"}</p>
+              <p className="mt-1">Vertices: {draftCount}</p>
+              {mode === "draw-polygon" ? (
+                draftArea ? <p className="mt-1">Area: {draftArea}</p> : null
+              ) : draftLength ? (
+                <p className="mt-1">Length: {draftLength}</p>
+              ) : null}
             </div>
           ) : null}
           <div className="text-xs text-slate-400">
@@ -272,6 +288,7 @@ function SelectedFeatureCard({
   onSplit,
   selectedFeatureElevation,
   selectedFeature,
+  selectedFeatureArea,
   selectedFeatureLength,
   selectedVertexElevation,
   selectedVertexDistanceFromStart,
@@ -288,6 +305,7 @@ function SelectedFeatureCard({
   onSplit: () => void;
   selectedFeatureElevation: string;
   selectedFeature: Feature<DatasetGeometry>;
+  selectedFeatureArea: string | null;
   selectedFeatureLength: string | null;
   selectedVertexElevation: string | null;
   selectedVertexDistanceFromStart: string | null;
@@ -308,7 +326,11 @@ function SelectedFeatureCard({
         {selectedFeature.geometry.type === "Point" ? (
           <p className="mt-1">Elevation: {selectedFeatureElevation}</p>
         ) : null}
-        {selectedFeatureLength ? <p className="mt-1">Length: {selectedFeatureLength}</p> : null}
+        {selectedFeature.geometry.type === "Polygon" ? (
+          selectedFeatureArea ? <p className="mt-1">Area: {selectedFeatureArea}</p> : null
+        ) : selectedFeatureLength ? (
+          <p className="mt-1">Length: {selectedFeatureLength}</p>
+        ) : null}
         <div className="mt-3 flex gap-2">
           <Button className="flex-1" onClick={onExport} variant="secondary">
             Export

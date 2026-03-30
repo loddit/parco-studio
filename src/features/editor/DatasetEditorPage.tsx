@@ -22,10 +22,13 @@ import {
   FALLBACK_CENTER,
   FALLBACK_ZOOM,
   formatCoordinateElevation,
+  formatArea,
   formatLineLength,
   getFeatureBounds,
   getClickedFeatureId,
   getLinkableLineEndpoints,
+  getLineLength,
+  getPolygonArea,
   getFeatureMidpoints,
   getFeatureVertices,
   getLineDistanceToVertex,
@@ -460,6 +463,18 @@ export function DatasetEditorPage() {
           ),
         )
       : null;
+  const selectedFeatureArea =
+    selectedFeature?.geometry.type === "Polygon"
+      ? formatArea(getPolygonArea(selectedVertices))
+      : null;
+  const draftLength =
+    mode === "draw-line" && draftCoordinates.length >= 2
+      ? formatLineLength(getLineLength(draftCoordinates))
+      : null;
+  const draftArea =
+    mode === "draw-polygon" && draftCoordinates.length >= 3
+      ? formatArea(getPolygonArea(draftCoordinates))
+      : null;
   const selectedVertexDistanceFromStart =
     selectedFeature?.geometry.type === "LineString" && selectedVertexIndex !== null
       ? formatLineLength(
@@ -611,6 +626,8 @@ export function DatasetEditorPage() {
       <EditorSidebar
         datasetName={dataset.name}
         draftCount={draftCoordinates.length}
+        draftArea={draftArea}
+        draftLength={draftLength}
         featureCount={features.features.length}
         importInputRef={importInputRef}
         isDirty={isDirty}
@@ -629,6 +646,7 @@ export function DatasetEditorPage() {
         onSave={() => void handleSaveDataset()}
         selectedFeatureElevation={selectedFeatureElevation}
         selectedFeature={selectedFeature}
+        selectedFeatureArea={selectedFeatureArea}
         selectedFeatureLength={selectedFeatureLength}
         selectedVertexElevation={selectedVertexElevation}
         selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
