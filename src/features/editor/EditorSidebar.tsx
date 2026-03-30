@@ -9,6 +9,9 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLine,
   IconPolygon,
+  IconFileExport,
+  IconSquareXFilled,
+  IconClipboardText,
 } from "@tabler/icons-react";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
@@ -36,6 +39,7 @@ type EditorSidebarProps = {
   onSplitSelectedLineString: () => void;
   onDeleteSelectedVertex: () => void;
   onDeleteSelectedFeature: () => void;
+  onCopySelectedFeatureGeoJson: () => void;
   onExportSelectedFeature: () => void;
   onImportFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onModeChange: (mode: EditorMode) => void;
@@ -70,6 +74,7 @@ export function EditorSidebar({
   onSplitSelectedLineString,
   onDeleteSelectedVertex,
   onDeleteSelectedFeature,
+  onCopySelectedFeatureGeoJson,
   onExportSelectedFeature,
   onImportFileChange,
   onModeChange,
@@ -207,6 +212,7 @@ export function EditorSidebar({
             <SelectedFeatureCard
               onDelete={onDeleteSelectedFeature}
               onDeleteVertex={onDeleteSelectedVertex}
+              onCopyGeoJson={onCopySelectedFeatureGeoJson}
               onExport={onExportSelectedFeature}
               onLink={onLinkSelectedLineString}
               onSplit={onSplitSelectedLineString}
@@ -283,6 +289,7 @@ export function EditorSidebar({
 function SelectedFeatureCard({
   onDelete,
   onDeleteVertex,
+  onCopyGeoJson,
   onExport,
   onLink,
   onSplit,
@@ -300,6 +307,7 @@ function SelectedFeatureCard({
 }: {
   onDelete: () => void;
   onDeleteVertex: () => void;
+  onCopyGeoJson: () => void;
   onExport: () => void;
   onLink: () => void;
   onSplit: () => void;
@@ -331,12 +339,30 @@ function SelectedFeatureCard({
         ) : selectedFeatureLength ? (
           <p className="mt-1">Length: {selectedFeatureLength}</p>
         ) : null}
-        <div className="mt-3 flex gap-2">
-          <Button className="flex-1" onClick={onExport} variant="secondary">
-            Export
+        <div className="mt-3 flex gap-1.5">
+          <Button
+            className="min-w-0 flex-1 text-xs"
+            onClick={onExport}
+            variant="secondary"
+            title="Export"
+          >
+            <IconFileExport size={18}/>
           </Button>
-          <Button className="flex-1" onClick={onDelete} variant="ghost">
-            Delete
+          <Button
+            className="min-w-0 flex-1 text-xs"
+            onClick={onCopyGeoJson}
+            variant="secondary"
+            title="Copy GeoJSON"
+          >
+            <IconClipboardText size={18}/>
+          </Button>
+          <Button
+            className="min-w-0 flex-1 text-xs"
+            onClick={onDelete}
+            variant="secondary"
+            title="Delete"
+          >
+            <IconSquareXFilled size={18} />
           </Button>
         </div>
       </div>

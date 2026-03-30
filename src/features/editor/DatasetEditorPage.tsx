@@ -2,6 +2,7 @@ import type { ChangeEvent } from "react";
 import type { Feature, GeoJSON, LineString } from "geojson";
 import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useToast } from "@/components/Toast";
 import { getDataset, saveDatasetState } from "@/lib/datasets-db";
 import {
   createEmptyFeatureCollection,
@@ -53,6 +54,7 @@ const MapCanvas = lazy(() =>
 
 export function DatasetEditorPage() {
   const { datasetId = "" } = useParams();
+  const { showToast } = useToast();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const undoStackRef = useRef<DatasetFeatureCollection[]>([]);
   const redoStackRef = useRef<DatasetFeatureCollection[]>([]);
@@ -518,6 +520,19 @@ export function DatasetEditorPage() {
     setIsExportModalOpen(true);
   }
 
+  async function handleCopySelectedFeatureGeoJson() {
+    if (!selectedFeature) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(selectedFeature, null, 2));
+      showToast("GeoJSON copied to clipboard.", { tone: "success" });
+    } catch {
+      showToast("Failed to copy GeoJSON to clipboard.", { tone: "error" });
+    }
+  }
+
   function handleExport(format: ExportFormat) {
     if (!selectedFeature) {
       return;
@@ -637,6 +652,7 @@ export function DatasetEditorPage() {
         onLinkSelectedLineString={handleToggleLinkSelectedLineString}
         onDeleteSelectedVertex={handleDeleteSelectedVertex}
         onDeleteSelectedFeature={handleDeleteSelectedFeature}
+        onCopySelectedFeatureGeoJson={() => void handleCopySelectedFeatureGeoJson()}
         onExportSelectedFeature={handleExportSelectedFeature}
         onSplitSelectedLineString={handleSplitSelectedLineString}
         onImportFileChange={handleImportFile}
