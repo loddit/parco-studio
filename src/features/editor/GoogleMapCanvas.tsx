@@ -18,7 +18,12 @@ import {
 import type { FeatureCollection, Geometry } from "geojson";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { LngLat, LngLatBounds } from "@/types/dataset";
-import { buildDraftFeatures, buildRenderableFeatures, getMapCursor } from "./editor-helpers";
+import {
+  buildDraftFeatures,
+  buildRenderableFeatures,
+  getMapCursor,
+  type RouteAnnotation,
+} from "./editor-helpers";
 import { GoogleGeocodingBar } from "./GoogleGeocodingBar";
 import type { MapCanvasLayerMouseEvent, MapCanvasMarkerEvent, MapCanvasProps } from "./MapCanvas";
 
@@ -59,6 +64,7 @@ export function GoogleMapCanvas({
   pendingLinkEndpoint,
   selectedFeatureId,
   selectedMidpoints,
+  selectedRouteAnnotations,
   selectedVertexIndex,
   selectedVertices,
   setIsHoveringSelectableFeature,
@@ -241,6 +247,16 @@ export function GoogleMapCanvas({
                     }
                     onDoubleClick={(event) => event.stopPropagation()}
                   />
+                </AdvancedMarker>
+              ))}
+              {selectedRouteAnnotations.map((annotation, index) => (
+                <AdvancedMarker
+                  anchorPoint={AdvancedMarkerAnchorPoint.BOTTOM_CENTER}
+                  clickable={false}
+                  key={`${selectedFeatureId}-annotation-${annotation.kind}-${index}`}
+                  position={{ lat: annotation.coordinate[1], lng: annotation.coordinate[0] }}
+                >
+                  <RouteAnnotationBadge kind={annotation.kind} label={annotation.label} />
                 </AdvancedMarker>
               ))}
             </>
@@ -489,6 +505,27 @@ function GoogleMapLayers({
   }, [cursor, map]);
 
   return null;
+}
+
+function RouteAnnotationBadge({
+  kind,
+  label,
+}: {
+  kind: RouteAnnotation["kind"];
+  label: string;
+}) {
+  const className =
+    kind === "distance"
+      ? "text-slate-600"
+      : kind === "start"
+        ? "text-emerald-700"
+        : "text-rose-700";
+
+  return (
+    <div className={`-translate-y-1 whitespace-nowrap text-[11px] font-semibold drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)] ${className}`}>
+      {label}
+    </div>
+  );
 }
 
 function getRenderedFeatureStyle(

@@ -8,6 +8,7 @@ import {
   getClickedFeatureId,
   getMapCursor,
   type LinkableLineEndpoint,
+  type RouteAnnotation,
 } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
 import { GoogleMapCanvas } from "./GoogleMapCanvas";
@@ -197,6 +198,7 @@ export type MapCanvasProps = {
   pendingLinkEndpoint: { featureId: string; vertexIndex: number } | null;
   selectedFeatureId: string | null;
   selectedMidpoints: Array<{ coordinate: LngLat; segmentIndex: number }>;
+  selectedRouteAnnotations: RouteAnnotation[];
   selectedVertexIndex: number | null;
   selectedVertices: LngLat[];
   setIsHoveringSelectableFeature: (value: boolean) => void;
@@ -237,6 +239,7 @@ function MapGLCanvas({
   pendingLinkEndpoint,
   selectedFeatureId,
   selectedMidpoints,
+  selectedRouteAnnotations,
   selectedVertexIndex,
   selectedVertices,
   setIsHoveringSelectableFeature,
@@ -431,6 +434,17 @@ function MapGLCanvas({
                   />
                 </Marker>
               ))}
+              {selectedRouteAnnotations.map((annotation, index) => (
+                <Marker
+                  anchor="bottom"
+                  key={`${selectedFeatureId}-annotation-${annotation.kind}-${index}`}
+                  latitude={annotation.coordinate[1]}
+                  longitude={annotation.coordinate[0]}
+                  offset={[0, -4]}
+                >
+                  <RouteAnnotationBadge kind={annotation.kind} label={annotation.label} />
+                </Marker>
+              ))}
             </>
           ) : null}
           {mode === "select" && isLinkModeActive
@@ -486,6 +500,27 @@ function MapGLCanvas({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function RouteAnnotationBadge({
+  kind,
+  label,
+}: {
+  kind: RouteAnnotation["kind"];
+  label: string;
+}) {
+  const className =
+    kind === "distance"
+      ? "text-slate-600"
+      : kind === "start"
+        ? "text-emerald-700"
+        : "text-rose-700";
+
+  return (
+    <div className={`-translate-y-1 whitespace-nowrap text-[11px] font-semibold drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)] ${className}`}>
+      {label}
     </div>
   );
 }

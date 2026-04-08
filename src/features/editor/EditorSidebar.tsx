@@ -12,6 +12,7 @@ import {
   IconFileExport,
   IconSquareXFilled,
   IconClipboardText,
+  IconSignRight,
 } from "@tabler/icons-react";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
@@ -46,6 +47,8 @@ type EditorSidebarProps = {
   onOpenImport: () => void;
   onReset: () => void;
   onSave: () => void;
+  onToggleRouteAnnotations: () => void;
+  isRouteAnnotationsVisible: boolean;
   selectedFeatureElevation: string;
   selectedFeature: Feature<DatasetGeometry> | null;
   selectedFeatureArea: string | null;
@@ -81,6 +84,8 @@ export function EditorSidebar({
   onOpenImport,
   onReset,
   onSave,
+  onToggleRouteAnnotations,
+  isRouteAnnotationsVisible,
   selectedFeatureElevation,
   selectedFeature,
   selectedFeatureArea,
@@ -216,10 +221,12 @@ export function EditorSidebar({
               onExport={onExportSelectedFeature}
               onLink={onLinkSelectedLineString}
               onSplit={onSplitSelectedLineString}
+              onToggleRouteAnnotations={onToggleRouteAnnotations}
               selectedFeatureElevation={selectedFeatureElevation}
               selectedFeature={selectedFeature}
               selectedFeatureArea={selectedFeatureArea}
               selectedFeatureLength={selectedFeatureLength}
+              isRouteAnnotationsVisible={isRouteAnnotationsVisible}
               selectedVertexElevation={selectedVertexElevation}
               selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
               selectedVertexIndex={selectedVertexIndex}
@@ -293,10 +300,12 @@ function SelectedFeatureCard({
   onExport,
   onLink,
   onSplit,
+  onToggleRouteAnnotations,
   selectedFeatureElevation,
   selectedFeature,
   selectedFeatureArea,
   selectedFeatureLength,
+  isRouteAnnotationsVisible,
   selectedVertexElevation,
   selectedVertexDistanceFromStart,
   selectedVertexIndex,
@@ -311,10 +320,12 @@ function SelectedFeatureCard({
   onExport: () => void;
   onLink: () => void;
   onSplit: () => void;
+  onToggleRouteAnnotations: () => void;
   selectedFeatureElevation: string;
   selectedFeature: Feature<DatasetGeometry>;
   selectedFeatureArea: string | null;
   selectedFeatureLength: string | null;
+  isRouteAnnotationsVisible: boolean;
   selectedVertexElevation: string | null;
   selectedVertexDistanceFromStart: string | null;
   selectedVertexIndex: number | null;
@@ -340,6 +351,17 @@ function SelectedFeatureCard({
           <p className="mt-1">Length: {selectedFeatureLength}</p>
         ) : null}
         <div className="mt-3 flex gap-1.5">
+          {selectedFeature.geometry.type === "LineString" ? (
+            <Button
+              aria-label="Toggle route annotations"
+              className="min-w-0 flex-1 text-xs"
+              onClick={onToggleRouteAnnotations}
+              title="Toggle route annotations"
+              variant={isRouteAnnotationsVisible ? "primary" : "secondary"}
+            >
+              <IconSignRight size={18} />
+            </Button>
+          ) : null}
           <Button
             className="min-w-0 flex-1 text-xs"
             onClick={onExport}

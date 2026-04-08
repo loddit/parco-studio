@@ -32,6 +32,7 @@ import {
   getPolygonArea,
   getFeatureMidpoints,
   getFeatureVertices,
+  getLineRouteAnnotations,
   getLineDistanceToVertex,
   HISTORY_LIMIT,
   insertFeatureVertexAtMidpoint,
@@ -76,6 +77,7 @@ export function DatasetEditorPage() {
   const [isDraggingVertex, setIsDraggingVertex] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFileName, setExportFileName] = useState("");
+  const [isRouteAnnotationsVisible, setIsRouteAnnotationsVisible] = useState(false);
   const [pendingLinkEndpoint, setPendingLinkEndpoint] = useState<{
     featureId: string;
     vertexIndex: number;
@@ -456,6 +458,10 @@ export function DatasetEditorPage() {
     : null;
   const selectedVertices = selectedFeature ? getFeatureVertices(selectedFeature) : [];
   const selectedMidpoints = selectedFeature ? getFeatureMidpoints(selectedFeature) : [];
+  const selectedRouteAnnotations =
+    isRouteAnnotationsVisible && selectedFeature?.geometry.type === "LineString"
+      ? getLineRouteAnnotations(selectedVertices)
+      : [];
   const selectedFeatureLength =
     selectedFeature?.geometry.type === "LineString"
       ? formatLineLength(
@@ -660,10 +666,12 @@ export function DatasetEditorPage() {
         onOpenImport={() => importInputRef.current?.click()}
         onReset={handleResetDataset}
         onSave={() => void handleSaveDataset()}
+        onToggleRouteAnnotations={() => setIsRouteAnnotationsVisible((current) => !current)}
         selectedFeatureElevation={selectedFeatureElevation}
         selectedFeature={selectedFeature}
         selectedFeatureArea={selectedFeatureArea}
         selectedFeatureLength={selectedFeatureLength}
+        isRouteAnnotationsVisible={isRouteAnnotationsVisible}
         selectedVertexElevation={selectedVertexElevation}
         selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
         selectedVertexIndex={selectedVertexIndex}
@@ -707,6 +715,7 @@ export function DatasetEditorPage() {
             selectedFeatureId={selectedFeatureId}
             linkableLineEndpoints={linkableLineEndpoints}
             selectedMidpoints={selectedMidpoints}
+            selectedRouteAnnotations={selectedRouteAnnotations}
             selectedVertexIndex={selectedVertexIndex}
             selectedVertices={selectedVertices}
             setIsHoveringSelectableFeature={setIsHoveringSelectableFeature}

@@ -23,6 +23,12 @@ export type LinkableLineEndpoint = {
   vertexIndex: number;
 };
 
+export type RouteAnnotation = {
+  coordinate: LngLat;
+  kind: "start" | "end" | "distance";
+  label: string;
+};
+
 export const FALLBACK_CENTER = { lat: 31.2304, lng: 121.4737 };
 export const FALLBACK_ZOOM = 10;
 export const HISTORY_LIMIT = 100;
@@ -711,6 +717,83 @@ export function getLineDistanceToVertex(feature: Feature<LineString>, vertexInde
     },
     { units: "kilometers" },
   );
+}
+
+export function getLineCoordinateAtDistance(coordinates: LngLat[], distanceInKilometers: number): LngLat | null {
+  if (coordinates.length === 0) {
+    return null;
+  }
+
+  if (distanceInKilometers <= 0) {
+    return coordinates[0];
+  }
+
+  let traversedDistance = 0;
+
+  for (let index = 0; index < coordinates.length - 1; index += 1) {
+    const start = coordinates[index];
+    const end = coordinates[index + 1];
+    const segmentDistance = getLineLength([start, end]);
+
+    if (segmentDistance <= 0) {
+      continue;
+    }
+
+    if (traversedDistance + segmentDistance >= distanceInKilometers) {
+      const progress = (distanceInKilometers - traversedDistance) / segmentDistance;
+      const longitude = start[0] + (end[0] - start[0]) * progress;
+      const latitude = start[1] + (end[1] - start[1]) * progress;
+      const startElevation = getCoordinateElevation(start);
+      const endElevation = getCoordinateElevation(end);
+
+      if (startElevation !== null && endElevation !== null) {
+        return [longitude, latitude, startElevation + (endElevation - startElevation) * progress];
+      }
+
+      return [longitude, latitude];
+    }
+
+    traversedDistance += segmentDistance;
+  }
+
+  return coordinates[coordinates.length - 1];
+}
+
+export function getLineRouteAnnotations(coordinates: LngLat[]): RouteAnnotation[] {
+  if (coordinates.length < 2) {
+    return [];
+  }
+
+  const totalDistance = getLineLength(coordinates);
+  const annotations: RouteAnnotation[] = [
+    {
+      coordinate: coordinates[0],
+      kind: "start",
+      label: "start",
+    },
+  ];
+
+  for (let kilometer = 1; kilometer < totalDistance; kilometer += 1) {
+    const coordinate = getLineCoordinateAtDistance(coordinates, kilometer);
+
+    if (!coordinate) {
+      continue;
+    }
+
+    annotations.push({
+      coordinate,
+      kind: "distance",
+      label: `${kilometer} km`,
+    });
+  }
+
+  annotations.push({
+    coordinate: coordinates[coordinates.length - 1],
+    kind: "end",
+    label: "finish",
+  });
+
+  return annotations;
 }
 
 export function getModeDescription(mode: EditorMode, draftCount: number) {
