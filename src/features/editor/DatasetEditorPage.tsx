@@ -13,6 +13,7 @@ import {
 } from "@/types/dataset";
 import { EditorSidebar } from "./EditorSidebar";
 import { ExportModal, type ExportFormat } from "./ExportModal";
+import { LineAdjustModal } from "./LineAdjustModal";
 import {
   appendFeature,
   cloneFeatureCollection,
@@ -38,7 +39,10 @@ import {
   insertFeatureVertexAtMidpoint,
   isTypingTarget,
   linkLineFeaturesAtEndpoints,
+  replaceLineFeatureCoordinates,
   removeFeatureVertex,
+  reverseLineFeatureCoordinates,
+  simplifyLineCoordinatesByRdpRatio,
   splitLineFeatureAtVertex,
   updateFeatureVertex,
 } from "./editor-helpers";
@@ -76,8 +80,10 @@ export function DatasetEditorPage() {
   const [features, setFeatures] = useState<DatasetFeatureCollection>(createEmptyFeatureCollection());
   const [isDraggingVertex, setIsDraggingVertex] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isLineAdjustModalOpen, setIsLineAdjustModalOpen] = useState(false);
   const [exportFileName, setExportFileName] = useState("");
   const [isRouteAnnotationsVisible, setIsRouteAnnotationsVisible] = useState(false);
+  const [lineCompressionRatio, setLineCompressionRatio] = useState(0.4);
   const [pendingLinkEndpoint, setPendingLinkEndpoint] = useState<{
     featureId: string;
     vertexIndex: number;
@@ -364,6 +370,35 @@ export function DatasetEditorPage() {
             vertexIndex: selectedVertexIndex,
           },
     );
+  }
+
+  function handleReverseSelectedLineString() {
+    if (!selectedFeatureId || selectedFeature?.geometry.type !== "LineString") {
+      return;
+    }
+
+    commitFeatureChange(reverseLineFeatureCoordinates(features, selectedFeatureId));
+    setSelectedFeatureId(selectedFeatureId);
+    setSelectedVertexIndex(null);
+    setPendingLinkEndpoint(null);
+  }
+
+  function handleSimplifySelectedLineString(compressionRatio: number) {
+    if (!selectedFeatureId || selectedFeature?.geometry.type !== "LineString") {
+      return;
+    }
+
+    const nextCoordinates = simplifyLineCoordinatesByRdpRatio(selectedVertices, compressionRatio);
+
+    if (JSON.stringify(nextCoordinates) === JSON.stringify(selectedVertices)) {
+      return;
+    }
+
+    commitFeatureChange(replaceLineFeatureCoordinates(features, selectedFeatureId, nextCoordinates));
+    setLineCompressionRatio(compressionRatio);
+    setSelectedFeatureId(selectedFeatureId);
+    setSelectedVertexIndex(null);
+    setPendingLinkEndpoint(null);
   }
 
   function handleLinkEndpointClick(featureId: string, vertexIndex: number) {
@@ -664,6 +699,7 @@ export function DatasetEditorPage() {
         onImportFileChange={handleImportFile}
         onModeChange={handleModeChange}
         onOpenImport={() => importInputRef.current?.click()}
+        onOpenLineAdjustments={() => setIsLineAdjustModalOpen(true)}
         onReset={handleResetDataset}
         onSave={() => void handleSaveDataset()}
         onToggleRouteAnnotations={() => setIsRouteAnnotationsVisible((current) => !current)}
@@ -730,6 +766,20 @@ export function DatasetEditorPage() {
           onClose={() => setIsExportModalOpen(false)}
           onFileNameChange={setExportFileName}
           onExport={handleExport}
+        />
+      ) : null}
+      {isLineAdjustModalOpen && selectedFeature?.geometry.type === "LineString" ? (
+        <LineAdjustModal
+          initialCompressionRatio={lineCompressionRatio}
+          onApplyCompression={(compressionRatio) => {
+            handleSimplifySelectedLineString(compressionRatio);
+            setIsLineAdjustModalOpen(false);
+          }}
+          onClose={() => setIsLineAdjustModalOpen(false)}
+          onReverseDirection={() => {
+            handleReverseSelectedLineString();
+            setIsLineAdjustModalOpen(false);
+          }}
         />
       ) : null}
     </main>

@@ -508,6 +508,108 @@ export function linkLineFeaturesAtEndpoints(
   };
 }
 
+export function replaceLineFeatureCoordinates(
+  collection: DatasetFeatureCollection,
+  featureId: string,
+  coordinates: LngLat[],
+): DatasetFeatureCollection {
+  return {
+    ...collection,
+    features: collection.features.map((feature) => {
+      if (String(feature.id) !== featureId || feature.geometry.type !== "LineString") {
+        return feature;
+      }
+
+      return {
+        ...feature,
+        geometry: {
+          ...feature.geometry,
+          coordinates,
+        },
+      };
+    }),
+  };
+}
+
+export function reverseLineFeatureCoordinates(
+  collection: DatasetFeatureCollection,
+  featureId: string,
+): DatasetFeatureCollection {
+  const feature = collection.features.find((item) => String(item.id) === featureId);
+
+  if (!feature || feature.geometry.type !== "LineString") {
+    return collection;
+  }
+
+  return replaceLineFeatureCoordinates(collection, featureId, [...(feature.geometry.coordinates as LngLat[])].reverse());
+}
+
+export function simplifyLineCoordinatesByRdpRatio(
+  coordinates: LngLat[],
+  compressionRatio: number,
+): LngLat[] {
+  if (coordinates.length <= 2) {
+    return coordinates;
+  }
+
+  const isClosedLoop = coordinatesMatch(coordinates[0], coordinates[coordinates.length - 1]);
+  const normalizedCoordinates = isClosedLoop ? coordinates.slice(0, -1) : [...coordinates];
+  const minimumPointCount = isClosedLoop ? 3 : 2;
+  const clampedRatio = Math.max(0, Math.min(0.95, compressionRatio));
+  const targetPointCount = Math.max(
+    minimumPointCount,
+    Math.round(normalizedCoordinates.length * (1 - clampedRatio)),
+  );
+
+  if (targetPointCount >= normalizedCoordinates.length) {
+    return coordinates;
+  }
+
+  const [minLongitude, maxLongitude, minLatitude, maxLatitude] = normalizedCoordinates.reduce(
+    (bounds, coordinate) => [
+      Math.min(bounds[0], coordinate[0]),
+      Math.max(bounds[1], coordinate[0]),
+      Math.min(bounds[2], coordinate[1]),
+      Math.max(bounds[3], coordinate[1]),
+    ],
+    [Infinity, -Infinity, Infinity, -Infinity],
+  );
+  const maxTolerance = Math.hypot(maxLongitude - minLongitude, maxLatitude - minLatitude);
+
+  let low = 0;
+  let high = maxTolerance;
+  let bestCoordinates = normalizedCoordinates;
+  let bestDistanceToTarget = Math.abs(normalizedCoordinates.length - targetPointCount);
+
+  for (let index = 0; index < 24; index += 1) {
+    const tolerance = (low + high) / 2;
+    const simplifiedCoordinates = simplifyLineCoordinatesRdp(normalizedCoordinates, tolerance);
+    const distanceToTarget = Math.abs(simplifiedCoordinates.length - targetPointCount);
+
+    if (
+      distanceToTarget < bestDistanceToTarget ||
+      (distanceToTarget === bestDistanceToTarget &&
+        simplifiedCoordinates.length >= targetPointCount &&
+        simplifiedCoordinates.length < bestCoordinates.length)
+    ) {
+      bestCoordinates = simplifiedCoordinates;
+      bestDistanceToTarget = distanceToTarget;
+    }
+
+    if (simplifiedCoordinates.length > targetPointCount) {
+      low = tolerance;
+    } else {
+      high = tolerance;
+    }
+  }
+
+  const finalCoordinates = bestCoordinates.length >= minimumPointCount
+    ? bestCoordinates
+    : normalizedCoordinates.slice(0, minimumPointCount);
+
+  return isClosedLoop ? [...finalCoordinates, finalCoordinates[0]] : finalCoordinates;
+}
+
 export function extractSupportedFeatures(geojson: GeoJSON): Array<Feature<DatasetGeometry>> {
   if (geojson.type === "FeatureCollection") {
     return geojson.features.flatMap((feature) => extractFeature(feature));
@@ -534,6 +636,59 @@ function isLineEndpointIndex(coordinates: LngLat[], vertexIndex: number) {
 
 function coordinatesMatch(left: LngLat, right: LngLat) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function simplifyLineCoordinatesRdp(coordinates: LngLat[], tolerance: number): LngLat[] {
+  if (coordinates.length <= 2 || tolerance <= 0) {
+    return [...coordinates];
+  }
+
+  const includedIndexes = new Set<number>([0, coordinates.length - 1]);
+  const stack: Array<[number, number]> = [[0, coordinates.length - 1]];
+
+  while (stack.length > 0) {
+    const [startIndex, endIndex] = stack.pop() ?? [0, 0];
+    let maxDistance = 0;
+    let maxDistanceIndex = -1;
+
+    for (let index = startIndex + 1; index < endIndex; index += 1) {
+      const distance = getPerpendicularDistance(
+        coordinates[index],
+        coordinates[startIndex],
+        coordinates[endIndex],
+      );
+
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        maxDistanceIndex = index;
+      }
+    }
+
+    if (maxDistanceIndex !== -1 && maxDistance > tolerance) {
+      includedIndexes.add(maxDistanceIndex);
+      stack.push([startIndex, maxDistanceIndex], [maxDistanceIndex, endIndex]);
+    }
+  }
+
+  return coordinates.filter((_, index) => includedIndexes.has(index));
+}
+
+function getPerpendicularDistance(point: LngLat, lineStart: LngLat, lineEnd: LngLat) {
+  const [pointX, pointY] = point;
+  const [startX, startY] = lineStart;
+  const [endX, endY] = lineEnd;
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+
+  if (deltaX === 0 && deltaY === 0) {
+    return Math.hypot(pointX - startX, pointY - startY);
+  }
+
+  const projection = ((pointX - startX) * deltaX + (pointY - startY) * deltaY) / (deltaX ** 2 + deltaY ** 2);
+  const projectedX = startX + projection * deltaX;
+  const projectedY = startY + projection * deltaY;
+
+  return Math.hypot(pointX - projectedX, pointY - projectedY);
 }
 
 function extractFeature(feature: Feature): Array<Feature<DatasetGeometry>> {

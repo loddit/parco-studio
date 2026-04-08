@@ -13,6 +13,7 @@ import {
   IconSquareXFilled,
   IconClipboardText,
   IconSignRight,
+  IconAdjustments,
 } from "@tabler/icons-react";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
@@ -47,6 +48,7 @@ type EditorSidebarProps = {
   onOpenImport: () => void;
   onReset: () => void;
   onSave: () => void;
+  onOpenLineAdjustments: () => void;
   onToggleRouteAnnotations: () => void;
   isRouteAnnotationsVisible: boolean;
   selectedFeatureElevation: string;
@@ -84,6 +86,7 @@ export function EditorSidebar({
   onOpenImport,
   onReset,
   onSave,
+  onOpenLineAdjustments,
   onToggleRouteAnnotations,
   isRouteAnnotationsVisible,
   selectedFeatureElevation,
@@ -220,6 +223,7 @@ export function EditorSidebar({
               onCopyGeoJson={onCopySelectedFeatureGeoJson}
               onExport={onExportSelectedFeature}
               onLink={onLinkSelectedLineString}
+              onOpenLineAdjustments={onOpenLineAdjustments}
               onSplit={onSplitSelectedLineString}
               onToggleRouteAnnotations={onToggleRouteAnnotations}
               selectedFeatureElevation={selectedFeatureElevation}
@@ -299,6 +303,7 @@ function SelectedFeatureCard({
   onCopyGeoJson,
   onExport,
   onLink,
+  onOpenLineAdjustments,
   onSplit,
   onToggleRouteAnnotations,
   selectedFeatureElevation,
@@ -319,6 +324,7 @@ function SelectedFeatureCard({
   onCopyGeoJson: () => void;
   onExport: () => void;
   onLink: () => void;
+  onOpenLineAdjustments: () => void;
   onSplit: () => void;
   onToggleRouteAnnotations: () => void;
   selectedFeatureElevation: string;
@@ -351,6 +357,17 @@ function SelectedFeatureCard({
           <p className="mt-1">Length: {selectedFeatureLength}</p>
         ) : null}
         <div className="mt-3 flex gap-1.5">
+          {selectedFeature.geometry.type === "LineString" ? (
+            <Button
+              aria-label="Adjust route"
+              className="min-w-0 flex-1 text-xs"
+              onClick={onOpenLineAdjustments}
+              title="Adjust route"
+              variant="secondary"
+            >
+              <IconAdjustments size={18} />
+            </Button>
+          ) : null}
           {selectedFeature.geometry.type === "LineString" ? (
             <Button
               aria-label="Toggle route annotations"
