@@ -520,6 +520,11 @@ export function DatasetEditorPage() {
   const selectedFeature = selectedFeatureId
     ? features.features.find((feature) => String(feature.id) === selectedFeatureId) ?? null
     : null;
+  const selectedFeatureIndexInCollection = selectedFeatureId
+    ? features.features.findIndex((feature) => String(feature.id) === selectedFeatureId)
+    : -1;
+  const selectedFeatureOrdinal =
+    selectedFeatureIndexInCollection >= 0 ? selectedFeatureIndexInCollection + 1 : null;
   const selectedVertices = selectedFeature ? getFeatureVertices(selectedFeature) : [];
   const selectedMidpoints = selectedFeature ? getFeatureMidpoints(selectedFeature) : [];
   const selectedRouteAnnotations =
@@ -588,6 +593,36 @@ export function DatasetEditorPage() {
 
     setExportFileName(getDefaultExportFileName(selectedFeature));
     setIsExportModalOpen(true);
+  }
+
+  function handleNavigateFeature(direction: -1 | 1) {
+    const list = features.features;
+    const n = list.length;
+    if (n === 0) {
+      return;
+    }
+
+    setPendingLinkEndpoint(null);
+
+    const currentIdx = selectedFeatureId
+      ? list.findIndex((feature) => String(feature.id) === selectedFeatureId)
+      : -1;
+
+    let nextIdx: number;
+    if (currentIdx < 0) {
+      nextIdx = direction > 0 ? 0 : n - 1;
+    } else {
+      nextIdx = (currentIdx + direction + n) % n;
+    }
+
+    const nextFeature = list[nextIdx];
+    setSelectedFeatureId(String(nextFeature.id));
+    setSelectedVertexIndex(null);
+
+    const bounds = getFeatureBounds([nextFeature]);
+    if (bounds) {
+      mapActions.setPendingFitBounds(bounds);
+    }
   }
 
   async function handleCopySelectedFeatureGeoJson() {
@@ -714,6 +749,8 @@ export function DatasetEditorPage() {
         draftArea={draftArea}
         draftLength={draftLength}
         featureCount={features.features.length}
+        onNavigateFeature={handleNavigateFeature}
+        selectedFeatureOrdinal={selectedFeatureOrdinal}
         importInputRef={importInputRef}
         isDirty={isDirty}
         mapActions={mapActions}

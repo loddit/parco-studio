@@ -16,6 +16,8 @@ import {
   IconAdjustments,
   IconCheck,
   IconX,
+  IconCaretRightFilled,
+  IconCaretLeftFilled,
 } from "@tabler/icons-react";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
@@ -35,6 +37,8 @@ type EditorSidebarProps = {
   draftCount: number;
   draftLength: string | null;
   featureCount: number;
+  onNavigateFeature: (direction: -1 | 1) => void;
+  selectedFeatureOrdinal: number | null;
   importInputRef: React.RefObject<HTMLInputElement | null>;
   isDirty: boolean;
   mapActions: Pick<EditorMapActions, "setMapSource">;
@@ -75,6 +79,8 @@ export function EditorSidebar({
   draftCount,
   draftLength,
   featureCount,
+  onNavigateFeature,
+  selectedFeatureOrdinal,
   importInputRef,
   isDirty,
   mapActions,
@@ -218,9 +224,37 @@ export function EditorSidebar({
         <div className="mt-6 space-y-3 rounded-3xl border border-sky-100 bg-slate-50/80 p-4 text-sm">
           <div className="flex items-center justify-between gap-3">
             <span className="font-medium text-slate-700">Features</span>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-              {featureCount}
-            </span>
+            <div className="flex items-center gap-0.5">
+              <Button
+                aria-label="Previous feature"
+                className="h-7 w-7 shrink-0 rounded-full px-0"
+                disabled={featureCount === 0}
+                onClick={() => onNavigateFeature(-1)}
+                title="Previous feature"
+                type="button"
+                variant="ghost"
+              >
+                <IconCaretLeftFilled size={15} stroke={1.9} />
+              </Button>
+              <span className="min-w-[3.25rem] rounded-full bg-white px-2 py-1 text-center text-xs font-semibold tabular-nums text-slate-500">
+                {featureCount === 0
+                  ? "0"
+                  : selectedFeatureOrdinal !== null
+                    ? `${selectedFeatureOrdinal} / ${featureCount}`
+                    : `— / ${featureCount}`}
+              </span>
+              <Button
+                aria-label="Next feature"
+                className="h-7 w-7 shrink-0 rounded-full px-0"
+                disabled={featureCount === 0}
+                onClick={() => onNavigateFeature(1)}
+                title="Next feature"
+                type="button"
+                variant="ghost"
+              >
+                <IconCaretRightFilled size={15} stroke={1.9} />
+              </Button>
+            </div>
           </div>
           <p className="text-slate-500">{getModeDescription(mode, draftCount)}</p>
           {selectedFeature ? (
