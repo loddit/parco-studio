@@ -625,6 +625,34 @@ export function DatasetEditorPage() {
     }
   }
 
+  function handleNavigateVertex(direction: -1 | 1) {
+    if (!selectedFeatureId || selectedFeature?.geometry.type !== "LineString") {
+      return;
+    }
+
+    const vertices = getFeatureVertices(selectedFeature);
+    const n = vertices.length;
+    if (n === 0) {
+      return;
+    }
+
+    setPendingLinkEndpoint(null);
+
+    const safeCurrent =
+      selectedVertexIndex !== null && selectedVertexIndex >= 0 && selectedVertexIndex < n
+        ? selectedVertexIndex
+        : -1;
+
+    let nextIdx: number;
+    if (safeCurrent < 0) {
+      nextIdx = direction > 0 ? 0 : n - 1;
+    } else {
+      nextIdx = (safeCurrent + direction + n) % n;
+    }
+
+    setSelectedVertexIndex(nextIdx);
+  }
+
   async function handleCopySelectedFeatureGeoJson() {
     if (!selectedFeature) {
       return;
@@ -750,6 +778,7 @@ export function DatasetEditorPage() {
         draftLength={draftLength}
         featureCount={features.features.length}
         onNavigateFeature={handleNavigateFeature}
+        onNavigateVertex={handleNavigateVertex}
         selectedFeatureOrdinal={selectedFeatureOrdinal}
         importInputRef={importInputRef}
         isDirty={isDirty}

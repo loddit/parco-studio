@@ -38,6 +38,7 @@ type EditorSidebarProps = {
   draftLength: string | null;
   featureCount: number;
   onNavigateFeature: (direction: -1 | 1) => void;
+  onNavigateVertex: (direction: -1 | 1) => void;
   selectedFeatureOrdinal: number | null;
   importInputRef: React.RefObject<HTMLInputElement | null>;
   isDirty: boolean;
@@ -80,6 +81,7 @@ export function EditorSidebar({
   draftLength,
   featureCount,
   onNavigateFeature,
+  onNavigateVertex,
   selectedFeatureOrdinal,
   importInputRef,
   isDirty,
@@ -264,6 +266,7 @@ export function EditorSidebar({
               onCopyGeoJson={onCopySelectedFeatureGeoJson}
               onExport={onExportSelectedFeature}
               onLink={onLinkSelectedLineString}
+              onNavigateVertex={onNavigateVertex}
               onOpenLineAdjustments={onOpenLineAdjustments}
               onSplit={onSplitSelectedLineString}
               onToggleRouteAnnotations={onToggleRouteAnnotations}
@@ -346,6 +349,7 @@ function SelectedFeatureCard({
   onCopyGeoJson,
   onExport,
   onLink,
+  onNavigateVertex,
   onOpenLineAdjustments,
   onSplit,
   onToggleRouteAnnotations,
@@ -369,6 +373,7 @@ function SelectedFeatureCard({
   onCopyGeoJson: () => void;
   onExport: () => void;
   onLink: () => void;
+  onNavigateVertex: (direction: -1 | 1) => void;
   onOpenLineAdjustments: () => void;
   onSplit: () => void;
   onToggleRouteAnnotations: () => void;
@@ -462,7 +467,36 @@ function SelectedFeatureCard({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">
             Selected Vertex
           </p>
-          <p className="mt-2 font-medium">Point Index: {selectedVertexIndex + 1}</p>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="font-medium text-orange-900">Point Index</span>
+            <div className="flex items-center gap-0.5">
+              <Button
+                aria-label="Previous vertex"
+                className="h-7 w-7 shrink-0 rounded-full px-0 text-orange-900"
+                disabled={selectedVerticesCount === 0}
+                onClick={() => onNavigateVertex(-1)}
+                title="Previous vertex"
+                type="button"
+                variant="ghost"
+              >
+                <IconCaretLeftFilled size={15} stroke={1.9} />
+              </Button>
+              <span className="min-w-[1.75rem] rounded-full bg-white/90 px-2 py-1 text-center text-xs font-semibold tabular-nums text-orange-900">
+                {selectedVertexIndex + 1}
+              </span>
+              <Button
+                aria-label="Next vertex"
+                className="h-7 w-7 shrink-0 rounded-full px-0 text-orange-900"
+                disabled={selectedVerticesCount === 0}
+                onClick={() => onNavigateVertex(1)}
+                title="Next vertex"
+                type="button"
+                variant="ghost"
+              >
+                <IconCaretRightFilled size={15} stroke={1.9} />
+              </Button>
+            </div>
+          </div>
           <ElevationEditRow
             inputId="selected-vertex-elevation"
             onApply={onSetSelectedVertexElevation}
