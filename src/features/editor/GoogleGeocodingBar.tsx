@@ -92,7 +92,7 @@ export function GoogleGeocodingBar({ onLocationSelect }: GoogleGeocodingBarProps
         }}
       >
         <input
-          className="flex-1 bg-transparent text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none"
+          className="flex-1 py-1 bg-transparent text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none"
           disabled={!isReady}
           onChange={(event) => {
             setQuery(event.target.value);

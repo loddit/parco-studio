@@ -106,7 +106,7 @@ export function GeocodingBar({ googleMapsApiKey, onLocationSelect }: GeocodingBa
     <div className="flex max-w-[300px] flex-col gap-1">
       <form className="flex items-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-3 py-0 shadow-sm" onSubmit={handleSubmit}>
         <input
-          className="flex-1 bg-transparent text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none"
+          className="flex-1 py-1 bg-transparent text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none"
           disabled={!isGoogleMapsEnabled}
           onChange={(event) => {
             setQuery(event.target.value);

@@ -14,11 +14,14 @@ import {
   IconClipboardText,
   IconSignRight,
   IconAdjustments,
+  IconCheck,
+  IconX,
 } from "@tabler/icons-react";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/Button";
+import { TextInput } from "@/components/TextInput";
 import type { Feature } from "geojson";
 import type { DatasetGeometry } from "@/types/dataset";
 import { getModeDescription } from "./editor-helpers";
@@ -51,11 +54,13 @@ type EditorSidebarProps = {
   onOpenLineAdjustments: () => void;
   onToggleRouteAnnotations: () => void;
   isRouteAnnotationsVisible: boolean;
-  selectedFeatureElevation: string;
+  selectedFeatureElevationMeters: number | null;
   selectedFeature: Feature<DatasetGeometry> | null;
   selectedFeatureArea: string | null;
   selectedFeatureLength: string | null;
-  selectedVertexElevation: string | null;
+  selectedVertexElevationMeters: number | null;
+  onSetSelectedFeatureElevation: (elevationMeters: number | null) => void;
+  onSetSelectedVertexElevation: (elevationMeters: number | null) => void;
   selectedVertexDistanceFromStart: string | null;
   selectedVertexIndex: number | null;
   selectedVerticesCount: number;
@@ -89,11 +94,13 @@ export function EditorSidebar({
   onOpenLineAdjustments,
   onToggleRouteAnnotations,
   isRouteAnnotationsVisible,
-  selectedFeatureElevation,
+  selectedFeatureElevationMeters,
   selectedFeature,
   selectedFeatureArea,
   selectedFeatureLength,
-  selectedVertexElevation,
+  selectedVertexElevationMeters,
+  onSetSelectedFeatureElevation,
+  onSetSelectedVertexElevation,
   selectedVertexDistanceFromStart,
   selectedVertexIndex,
   selectedVerticesCount,
@@ -226,12 +233,14 @@ export function EditorSidebar({
               onOpenLineAdjustments={onOpenLineAdjustments}
               onSplit={onSplitSelectedLineString}
               onToggleRouteAnnotations={onToggleRouteAnnotations}
-              selectedFeatureElevation={selectedFeatureElevation}
+              selectedFeatureElevationMeters={selectedFeatureElevationMeters}
               selectedFeature={selectedFeature}
               selectedFeatureArea={selectedFeatureArea}
               selectedFeatureLength={selectedFeatureLength}
               isRouteAnnotationsVisible={isRouteAnnotationsVisible}
-              selectedVertexElevation={selectedVertexElevation}
+              selectedVertexElevationMeters={selectedVertexElevationMeters}
+              onSetSelectedFeatureElevation={onSetSelectedFeatureElevation}
+              onSetSelectedVertexElevation={onSetSelectedVertexElevation}
               selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
               selectedVertexIndex={selectedVertexIndex}
               selectedVerticesCount={selectedVerticesCount}
@@ -306,12 +315,14 @@ function SelectedFeatureCard({
   onOpenLineAdjustments,
   onSplit,
   onToggleRouteAnnotations,
-  selectedFeatureElevation,
+  selectedFeatureElevationMeters,
   selectedFeature,
   selectedFeatureArea,
   selectedFeatureLength,
   isRouteAnnotationsVisible,
-  selectedVertexElevation,
+  selectedVertexElevationMeters,
+  onSetSelectedFeatureElevation,
+  onSetSelectedVertexElevation,
   selectedVertexDistanceFromStart,
   selectedVertexIndex,
   selectedVerticesCount,
@@ -327,12 +338,14 @@ function SelectedFeatureCard({
   onOpenLineAdjustments: () => void;
   onSplit: () => void;
   onToggleRouteAnnotations: () => void;
-  selectedFeatureElevation: string;
+  selectedFeatureElevationMeters: number | null;
   selectedFeature: Feature<DatasetGeometry>;
   selectedFeatureArea: string | null;
   selectedFeatureLength: string | null;
   isRouteAnnotationsVisible: boolean;
-  selectedVertexElevation: string | null;
+  selectedVertexElevationMeters: number | null;
+  onSetSelectedFeatureElevation: (elevationMeters: number | null) => void;
+  onSetSelectedVertexElevation: (elevationMeters: number | null) => void;
   selectedVertexDistanceFromStart: string | null;
   selectedVertexIndex: number | null;
   selectedVerticesCount: number;
@@ -349,7 +362,11 @@ function SelectedFeatureCard({
         <p className="mt-2 font-medium text-slate-900">{selectedFeature.geometry.type}</p>
         <p className="mt-1">Vertices: {selectedVerticesCount}</p>
         {selectedFeature.geometry.type === "Point" ? (
-          <p className="mt-1">Elevation: {selectedFeatureElevation}</p>
+          <ElevationEditRow
+            inputId="selected-feature-elevation"
+            onApply={onSetSelectedFeatureElevation}
+            valueMeters={selectedFeatureElevationMeters}
+          />
         ) : null}
         {selectedFeature.geometry.type === "Polygon" ? (
           selectedFeatureArea ? <p className="mt-1">Area: {selectedFeatureArea}</p> : null
@@ -411,8 +428,12 @@ function SelectedFeatureCard({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">
             Selected Vertex
           </p>
-          <p className="mt-2 font-medium">Point {selectedVertexIndex + 1}</p>
-          <p className="mt-1">Elevation: {selectedVertexElevation ?? "unknown"}</p>
+          <p className="mt-2 font-medium">Point Index: {selectedVertexIndex + 1}</p>
+          <ElevationEditRow
+            inputId="selected-vertex-elevation"
+            onApply={onSetSelectedVertexElevation}
+            valueMeters={selectedVertexElevationMeters}
+          />
           {selectedVertexDistanceFromStart ? (
             <p className="mt-1">Distance from start: {selectedVertexDistanceFromStart}</p>
           ) : null}
@@ -450,6 +471,72 @@ function SelectedFeatureCard({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ElevationEditRow({
+  valueMeters,
+  onApply,
+  inputId,
+}: {
+  valueMeters: number | null;
+  onApply: (elevationMeters: number | null) => void;
+  inputId: string;
+}) {
+  const [draft, setDraft] = useState(() => (valueMeters === null ? "" : String(valueMeters)));
+
+  useEffect(() => {
+    setDraft(valueMeters === null ? "" : String(valueMeters));
+  }, [valueMeters]);
+
+  function handleApply() {
+    const trimmed = draft.trim();
+    if (trimmed === "") {
+      return;
+    }
+
+    const next = Number(trimmed);
+    if (!Number.isFinite(next)) {
+      setDraft(valueMeters === null ? "" : String(valueMeters));
+      return;
+    }
+
+    onApply(next);
+  }
+
+  function handleClear() {
+    onApply(null);
+  }
+
+  return (
+    <div className="w-full mt-2 flex items-center gap-2">
+      <label className="text-sm">
+        Elevation:
+      </label>
+      <TextInput
+        className="flex-1 p-0 text-sm"
+        id={inputId}
+        inputMode="decimal"
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            handleApply();
+          }
+        }}
+        placeholder="null"
+        type="text"
+        value={draft}
+      />
+      <div className="flex shrink-0 gap-1.5">
+        <Button className="px-2 text-xs" onClick={handleApply} variant="secondary">
+          <IconCheck size={15} stroke={1.9} />
+        </Button>
+        <Button className="px-2 text-xs" onClick={handleClear} variant="secondary">
+          <IconTrash size={15} stroke={1.9} />
+        </Button>
+      </div>
     </div>
   );
 }

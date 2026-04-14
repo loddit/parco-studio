@@ -23,7 +23,7 @@ import {
   extractSupportedFeatures,
   FALLBACK_CENTER,
   FALLBACK_ZOOM,
-  formatCoordinateElevation,
+  getCoordinateElevation,
   formatArea,
   formatLineLength,
   getFeatureBounds,
@@ -45,6 +45,7 @@ import {
   simplifyLineCoordinatesByRdpRatio,
   splitLineFeatureAtVertex,
   updateFeatureVertex,
+  updateFeatureVertexElevation,
 } from "./editor-helpers";
 import { exportLineStringToGpx, parseGpx } from "./gpx";
 import type { MapCanvasLayerMouseEvent, MapCanvasMarkerEvent } from "./MapCanvas";
@@ -318,6 +319,34 @@ export function DatasetEditorPage() {
     setSelectedVertexIndex(vertexIndex);
   }
 
+  function handleSetSelectedFeatureElevation(elevationMeters: number | null) {
+    if (!selectedFeatureId) {
+      return;
+    }
+
+    const feature = features.features.find((item) => String(item.id) === selectedFeatureId);
+    if (!feature || feature.geometry.type !== "Point") {
+      return;
+    }
+
+    commitFeatureChange(updateFeatureVertexElevation(features, selectedFeatureId, 0, elevationMeters));
+  }
+
+  function handleSetSelectedVertexElevation(elevationMeters: number | null) {
+    if (!selectedFeatureId || selectedVertexIndex === null) {
+      return;
+    }
+
+    const feature = features.features.find((item) => String(item.id) === selectedFeatureId);
+    if (!feature || feature.geometry.type !== "LineString") {
+      return;
+    }
+
+    commitFeatureChange(
+      updateFeatureVertexElevation(features, selectedFeatureId, selectedVertexIndex, elevationMeters),
+    );
+  }
+
   function handleDeleteSelectedVertex() {
     if (!selectedFeatureId || selectedVertexIndex === null) {
       return;
@@ -524,12 +553,12 @@ export function DatasetEditorPage() {
           getLineDistanceToVertex(selectedFeature as Feature<LineString>, selectedVertexIndex),
         )
       : null;
-  const selectedFeatureElevation =
+  const selectedFeatureElevationMeters =
     selectedFeature?.geometry.type === "Point"
-      ? formatCoordinateElevation(selectedFeature.geometry.coordinates as LngLat)
-      : "unknown";
-  const selectedVertexElevation =
-    selectedVertexIndex !== null ? formatCoordinateElevation(selectedVertices[selectedVertexIndex]) : null;
+      ? getCoordinateElevation(selectedFeature.geometry.coordinates as LngLat)
+      : null;
+  const selectedVertexElevationMeters =
+    selectedVertexIndex !== null ? getCoordinateElevation(selectedVertices[selectedVertexIndex]) : null;
   const linkableLineEndpoints = getLinkableLineEndpoints(features);
   const canSplitSelectedLineString =
     selectedFeature?.geometry.type === "LineString" &&
@@ -703,12 +732,14 @@ export function DatasetEditorPage() {
         onReset={handleResetDataset}
         onSave={() => void handleSaveDataset()}
         onToggleRouteAnnotations={() => setIsRouteAnnotationsVisible((current) => !current)}
-        selectedFeatureElevation={selectedFeatureElevation}
+        selectedFeatureElevationMeters={selectedFeatureElevationMeters}
         selectedFeature={selectedFeature}
         selectedFeatureArea={selectedFeatureArea}
         selectedFeatureLength={selectedFeatureLength}
         isRouteAnnotationsVisible={isRouteAnnotationsVisible}
-        selectedVertexElevation={selectedVertexElevation}
+        selectedVertexElevationMeters={selectedVertexElevationMeters}
+        onSetSelectedFeatureElevation={handleSetSelectedFeatureElevation}
+        onSetSelectedVertexElevation={handleSetSelectedVertexElevation}
         selectedVertexDistanceFromStart={selectedVertexDistanceFromStart}
         selectedVertexIndex={selectedVertexIndex}
         selectedVerticesCount={selectedVertices.length}

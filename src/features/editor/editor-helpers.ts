@@ -277,6 +277,68 @@ export function updateFeatureVertex(
   };
 }
 
+/** Sets or clears the third coordinate (elevation in meters); lng/lat are preserved. */
+export function withElevationMeters(coordinate: LngLat, elevationMeters: number | null): LngLat {
+  if (elevationMeters === null || Number.isNaN(elevationMeters) || !Number.isFinite(elevationMeters)) {
+    return [coordinate[0], coordinate[1]];
+  }
+
+  return [coordinate[0], coordinate[1], elevationMeters];
+}
+
+export function updateFeatureVertexElevation(
+  collection: DatasetFeatureCollection,
+  featureId: string,
+  vertexIndex: number,
+  elevationMeters: number | null,
+): DatasetFeatureCollection {
+  return {
+    ...collection,
+    features: collection.features.map((feature) => {
+      if (String(feature.id) !== featureId) {
+        return feature;
+      }
+
+      if (feature.geometry.type === "Point") {
+        const current = feature.geometry.coordinates as LngLat;
+        return {
+          ...feature,
+          geometry: {
+            ...feature.geometry,
+            coordinates: withElevationMeters(current, elevationMeters),
+          },
+        };
+      }
+
+      if (feature.geometry.type === "LineString") {
+        return {
+          ...feature,
+          geometry: {
+            ...feature.geometry,
+            coordinates: feature.geometry.coordinates.map((coordinate, index) =>
+              index === vertexIndex
+                ? withElevationMeters(coordinate as LngLat, elevationMeters)
+                : coordinate,
+            ) as Position[],
+          },
+        };
+      }
+
+      const ring = [...feature.geometry.coordinates[0]];
+      ring[vertexIndex] = withElevationMeters(ring[vertexIndex] as LngLat, elevationMeters);
+      ring[ring.length - 1] = ring[0];
+
+      return {
+        ...feature,
+        geometry: {
+          ...feature.geometry,
+          coordinates: [ring],
+        },
+      };
+    }),
+  };
+}
+
 export function insertFeatureVertexAtMidpoint(
   collection: DatasetFeatureCollection,
   featureId: string,
