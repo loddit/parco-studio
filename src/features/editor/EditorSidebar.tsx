@@ -26,7 +26,6 @@ import { Button } from "@/components/Button";
 import { TextInput } from "@/components/TextInput";
 import type { Feature } from "geojson";
 import type { DatasetGeometry } from "@/types/dataset";
-import { getModeDescription } from "./editor-helpers";
 import type { EditorMode } from "./editor-types";
 import type { EditorMapActions, EditorMapState } from "./useEditorMapState";
 import { MapSettingsModal } from "./MapSettingsModal";
@@ -189,7 +188,6 @@ export function EditorSidebar({
       )}
 
       <div className={clsx(isCollapsed ? "mt-4 w-full" : "mt-6")}>
-        {isCollapsed ? null : <p className="mb-2 text-sm font-medium text-slate-700">Mode</p>}
         <div className={clsx("gap-2", isCollapsed ? "flex flex-col items-center" : "grid grid-cols-4")}>
           <ModeButton
             active={mode === "select"}
@@ -238,7 +236,7 @@ export function EditorSidebar({
               >
                 <IconCaretLeftFilled size={15} stroke={1.9} />
               </Button>
-              <span className="min-w-[3.25rem] rounded-full bg-white px-2 py-1 text-center text-xs font-semibold tabular-nums text-slate-500">
+              <span className="min-w-13 rounded-full bg-white px-2 py-1 text-center text-xs font-semibold tabular-nums text-slate-500">
                 {featureCount === 0
                   ? "0"
                   : selectedFeatureOrdinal !== null
@@ -258,7 +256,6 @@ export function EditorSidebar({
               </Button>
             </div>
           </div>
-          <p className="text-slate-500">{getModeDescription(mode, draftCount)}</p>
           {selectedFeature ? (
             <SelectedFeatureCard
               onDelete={onDeleteSelectedFeature}
@@ -481,7 +478,7 @@ function SelectedFeatureCard({
               >
                 <IconCaretLeftFilled size={15} stroke={1.9} />
               </Button>
-              <span className="min-w-[1.75rem] rounded-full bg-white/90 px-2 py-1 text-center text-xs font-semibold tabular-nums text-orange-900">
+              <span className="min-w-7 rounded-full bg-white/90 px-2 py-1 text-center text-xs font-semibold tabular-nums text-orange-900">
                 {selectedVertexIndex + 1}
               </span>
               <Button

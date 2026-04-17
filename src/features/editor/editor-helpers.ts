@@ -1013,26 +1013,6 @@ export function getLineRouteAnnotations(coordinates: LngLat[]): RouteAnnotation[
   return annotations;
 }
 
-export function getModeDescription(mode: EditorMode, draftCount: number) {
-  if (mode === "select") {
-    return "Select features, drag vertices, and delete with Backspace or Delete.";
-  }
-
-  if (mode === "draw-point") {
-    return "Click once to place a point.";
-  }
-
-  if (mode === "draw-line") {
-    return draftCount > 0
-      ? "Continue clicking to add vertices. Press Enter or double-click to finish."
-      : "Click to start a line.";
-  }
-
-  return draftCount > 0
-    ? "Continue clicking to shape the polygon. Press Enter or double-click to finish."
-    : "Click to start a polygon.";
-}
-
 export function getMapCursor(
   mode: EditorMode,
   isDraggingVertex: boolean,
