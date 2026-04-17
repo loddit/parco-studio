@@ -118,6 +118,7 @@ export function GoogleMapCanvas({
           disableDoubleClickZoom={mode === "draw-line" || mode === "draw-polygon"}
           draggable={!isDraggingVertex}
           mapId={googleMapsId || undefined}
+          mapTypeId={getGoogleMapTypeId(mapState.mapStyle)}
           onCameraChanged={(event: MapCameraChangedEvent) => {
             mapActions.setViewport({
               center: [event.detail.center.lng, event.detail.center.lat],
@@ -308,6 +309,20 @@ export function GoogleMapCanvas({
       </APIProvider>
     </div>
   );
+}
+
+function getGoogleMapTypeId(
+  style: MapCanvasProps["mapState"]["mapStyle"],
+): "roadmap" | "satellite" | "terrain" {
+  if (style === "satellite") {
+    return "satellite";
+  }
+
+  if (style === "terrain") {
+    return "terrain";
+  }
+
+  return "roadmap";
 }
 
 function GoogleMapLayers({

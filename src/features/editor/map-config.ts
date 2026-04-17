@@ -97,10 +97,12 @@ export type EditorMapRenderer = (typeof MAP_SOURCE_CONFIG)[EditorMapSource]["ren
 
 type SourceConfig<S extends EditorMapSource> = (typeof MAP_SOURCE_CONFIG)[S];
 
-export type EditorMapStyle<S extends EditorMapSource = EditorMapSource> = keyof SourceConfig<S>["styles"];
+export type EditorMapStyle = {
+  [S in EditorMapSource]: keyof SourceConfig<S>["styles"];
+}[EditorMapSource];
 
 export const DEFAULT_MAP_SOURCE: EditorMapSource = "carto";
-export const DEFAULT_MAP_STYLE: EditorMapStyle<"carto"> = "default";
+export const DEFAULT_MAP_STYLE: EditorMapStyle = "default";
 
 export function getMapSourceOptions() {
   return (Object.entries(MAP_SOURCE_CONFIG) as Array<
@@ -116,7 +118,7 @@ export function getMapStyleOptions(source: EditorMapSource) {
   const styles = MAP_SOURCE_CONFIG[source].styles;
 
   return (Object.entries(styles) as Array<
-    [EditorMapStyle<typeof source>, SourceConfig<typeof source>["styles"][EditorMapStyle<typeof source>]]
+    [EditorMapStyle, SourceConfig<typeof source>["styles"][keyof SourceConfig<typeof source>["styles"]]]
   >).map(([value, config]) => ({
     value,
     label: config.label,
@@ -128,6 +130,10 @@ export function getMapRenderer(source: EditorMapSource): EditorMapRenderer {
 }
 
 export function getInitialMapStyle(source: EditorMapSource): EditorMapStyle {
+  if (source === "google") {
+    return "satellite";
+  }
+
   const [firstStyle] = Object.keys(MAP_SOURCE_CONFIG[source].styles) as EditorMapStyle[];
   return firstStyle;
 }
