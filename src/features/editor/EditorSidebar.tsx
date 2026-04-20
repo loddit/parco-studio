@@ -39,7 +39,6 @@ type EditorSidebarProps = {
   onNavigateFeature: (direction: -1 | 1) => void;
   onNavigateVertex: (direction: -1 | 1) => void;
   selectedFeatureOrdinal: number | null;
-  importInputRef: React.RefObject<HTMLInputElement | null>;
   isDirty: boolean;
   mapActions: Pick<EditorMapActions, "setMapSource">;
   mapState: Pick<EditorMapState, "mapSource" | "mapSourceOptions" | "selectedMapSourceRequirement">;
@@ -50,7 +49,6 @@ type EditorSidebarProps = {
   onDeleteSelectedFeature: () => void;
   onCopySelectedFeatureGeoJson: () => void;
   onExportSelectedFeature: () => void;
-  onImportFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onModeChange: (mode: EditorMode) => void;
   onOpenImport: () => void;
   onReset: () => void;
@@ -82,7 +80,6 @@ export function EditorSidebar({
   onNavigateFeature,
   onNavigateVertex,
   selectedFeatureOrdinal,
-  importInputRef,
   isDirty,
   mapActions,
   mapState,
@@ -93,7 +90,6 @@ export function EditorSidebar({
   onDeleteSelectedFeature,
   onCopySelectedFeatureGeoJson,
   onExportSelectedFeature,
-  onImportFileChange,
   onModeChange,
   onOpenImport,
   onReset,
@@ -164,14 +160,6 @@ export function EditorSidebar({
           {isCollapsed ? <IconLayoutSidebarLeftExpand size={18} stroke={1.9} /> : <IconLayoutSidebarLeftCollapse size={18} stroke={1.9} />}
         </Button>
       </div>
-
-      <input
-        accept=".geojson,.json,.gpx,application/geo+json,application/json,application/gpx+xml"
-        className="hidden"
-        onChange={(event) => void onImportFileChange(event)}
-        ref={importInputRef}
-        type="file"
-      />
 
       {isCollapsed ? null : (
         <div className="mt-4 flex gap-2">

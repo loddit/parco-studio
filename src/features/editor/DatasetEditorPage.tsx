@@ -1,4 +1,3 @@
-import type { ChangeEvent } from "react";
 import type { Feature, GeoJSON, LineString } from "geojson";
 import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -13,6 +12,7 @@ import {
 } from "@/types/dataset";
 import { EditorSidebar } from "./EditorSidebar";
 import { ExportModal, type ExportFormat } from "./ExportModal";
+import { ImportModal, type ImportFormat } from "./ImportModal";
 import { LineAdjustModal } from "./LineAdjustModal";
 import {
   appendFeature,
@@ -50,6 +50,7 @@ import {
 import { exportLineStringToGpx, parseGpx } from "./gpx";
 import type { MapCanvasLayerMouseEvent, MapCanvasMarkerEvent } from "./MapCanvas";
 import type { EditorMode } from "./editor-types";
+import { parseEncodedPolyline } from "./polyline";
 import { useEditorMapState } from "./useEditorMapState";
 
 const MapCanvas = lazy(() =>
@@ -61,7 +62,6 @@ const MapCanvas = lazy(() =>
 export function DatasetEditorPage() {
   const { datasetId = "" } = useParams();
   const { showToast } = useToast();
-  const importInputRef = useRef<HTMLInputElement | null>(null);
   const undoStackRef = useRef<DatasetFeatureCollection[]>([]);
   const redoStackRef = useRef<DatasetFeatureCollection[]>([]);
   const dragStartFeaturesRef = useRef<DatasetFeatureCollection | null>(null);
@@ -81,6 +81,7 @@ export function DatasetEditorPage() {
   const [features, setFeatures] = useState<DatasetFeatureCollection>(createEmptyFeatureCollection());
   const [isDraggingVertex, setIsDraggingVertex] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isLineAdjustModalOpen, setIsLineAdjustModalOpen] = useState(false);
   const [exportFileName, setExportFileName] = useState("");
   const [isRouteAnnotationsVisible, setIsRouteAnnotationsVisible] = useState(false);
@@ -480,7 +481,8 @@ export function DatasetEditorPage() {
   function importFeaturesFromContent(
     content: string,
     sourceName: string,
-    sourceType: "geojson" | "gpx" | "auto" = "auto",
+    sourceType: ImportFormat = "auto",
+    polylinePrecision: 5 | 6 = 5,
   ) {
     const trimmedContent = content.trim();
 
@@ -491,20 +493,26 @@ export function DatasetEditorPage() {
     const normalizedSourceName = sourceName.toLowerCase();
     const shouldParseAsGpx =
       sourceType === "gpx" ||
-      normalizedSourceName.endsWith(".gpx") ||
-      trimmedContent.startsWith("<?xml") ||
-      trimmedContent.startsWith("<gpx");
+      (sourceType === "auto" &&
+        (normalizedSourceName.endsWith(".gpx") ||
+          trimmedContent.startsWith("<?xml") ||
+          trimmedContent.startsWith("<gpx")));
 
     try {
-      const importedFeatures = shouldParseAsGpx
-        ? parseGpx(trimmedContent)
-        : extractSupportedFeatures(JSON.parse(trimmedContent) as GeoJSON);
+      const importedFeatures =
+        sourceType === "polyline"
+          ? parseEncodedPolyline(trimmedContent, polylinePrecision)
+          : shouldParseAsGpx
+            ? parseGpx(trimmedContent)
+            : extractSupportedFeatures(JSON.parse(trimmedContent) as GeoJSON);
 
       if (importedFeatures.length === 0) {
         window.alert(
-          shouldParseAsGpx
-            ? "No supported GPX features found. Waypoints and tracks/routes with at least two points are imported."
-            : "No supported GeoJSON features found. Only Point, LineString, and Polygon are imported.",
+          sourceType === "polyline"
+            ? "No valid coordinates were decoded from the encoded polyline."
+            : shouldParseAsGpx
+              ? "No supported GPX features found. Waypoints and tracks/routes with at least two points are imported."
+              : "No supported GeoJSON features found. Only Point, LineString, and Polygon are imported.",
         );
         return true;
       }
@@ -515,88 +523,22 @@ export function DatasetEditorPage() {
       });
       resetTransientEditorState();
       mapActions.setPendingFitBounds(getFeatureBounds(importedFeatures));
+      showToast(`Imported ${importedFeatures.length} feature${importedFeatures.length === 1 ? "" : "s"}.`, {
+        tone: "success",
+      });
 
       return true;
     } catch {
       window.alert(
-        shouldParseAsGpx
-          ? "Failed to import GPX. Check that the content contains valid GPX XML."
-          : "Failed to import GeoJSON. Check that the content contains valid JSON.",
+        sourceType === "polyline"
+          ? "Failed to import polyline. Check that the encoded string and precision are correct."
+          : shouldParseAsGpx
+            ? "Failed to import GPX. Check that the content contains valid GPX XML."
+            : "Failed to import GeoJSON. Check that the content contains valid JSON.",
       );
       return true;
     }
   }
-
-  function looksLikeImportableClipboardText(content: string) {
-    const trimmedContent = content.trim();
-
-    return (
-      trimmedContent.startsWith("<?xml") ||
-      trimmedContent.startsWith("<gpx") ||
-      trimmedContent.startsWith("{") ||
-      trimmedContent.startsWith("[")
-    );
-  }
-
-  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    try {
-      const content = await file.text();
-      importFeaturesFromContent(content, file.name);
-    } finally {
-      event.target.value = "";
-    }
-  }
-
-  const onWindowPaste = useEffectEvent((event: ClipboardEvent) => {
-    if (isTypingTarget(event.target)) {
-      return;
-    }
-
-    const clipboardData = event.clipboardData;
-
-    if (!clipboardData) {
-      return;
-    }
-
-    const file = Array.from(clipboardData.files).find((candidate) => {
-      const fileName = candidate.name.toLowerCase();
-
-      return fileName.endsWith(".geojson") || fileName.endsWith(".json") || fileName.endsWith(".gpx");
-    });
-
-    if (file) {
-      event.preventDefault();
-      void file.text().then((content) => {
-        importFeaturesFromContent(content, file.name);
-      });
-      return;
-    }
-
-    const text = clipboardData.getData("text/plain");
-
-    if (!looksLikeImportableClipboardText(text)) {
-      return;
-    }
-
-    if (importFeaturesFromContent(text, "clipboard", "auto")) {
-      event.preventDefault();
-    }
-  });
-
-  useEffect(() => {
-    function handlePaste(event: ClipboardEvent) {
-      onWindowPaste(event);
-    }
-
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
-  }, [onWindowPaste]);
 
   const selectedFeature = selectedFeatureId
     ? features.features.find((feature) => String(feature.id) === selectedFeatureId) ?? null
@@ -861,7 +803,6 @@ export function DatasetEditorPage() {
         onNavigateFeature={handleNavigateFeature}
         onNavigateVertex={handleNavigateVertex}
         selectedFeatureOrdinal={selectedFeatureOrdinal}
-        importInputRef={importInputRef}
         isDirty={isDirty}
         mapActions={mapActions}
         mapState={mapState}
@@ -872,9 +813,8 @@ export function DatasetEditorPage() {
         onCopySelectedFeatureGeoJson={() => void handleCopySelectedFeatureGeoJson()}
         onExportSelectedFeature={handleExportSelectedFeature}
         onSplitSelectedLineString={handleSplitSelectedLineString}
-        onImportFileChange={handleImportFile}
         onModeChange={handleModeChange}
-        onOpenImport={() => importInputRef.current?.click()}
+        onOpenImport={() => setIsImportModalOpen(true)}
         onOpenLineAdjustments={() => setIsLineAdjustModalOpen(true)}
         onReset={handleResetDataset}
         onSave={() => void handleSaveDataset()}
@@ -944,6 +884,23 @@ export function DatasetEditorPage() {
           onClose={() => setIsExportModalOpen(false)}
           onFileNameChange={setExportFileName}
           onExport={handleExport}
+        />
+      ) : null}
+      {isImportModalOpen ? (
+        <ImportModal
+          onClose={() => setIsImportModalOpen(false)}
+          onImportText={(payload) => {
+            const imported = importFeaturesFromContent(
+              payload.text,
+              payload.sourceName,
+              payload.format,
+              payload.format === "polyline" ? payload.precision : 5,
+            );
+
+            if (imported) {
+              setIsImportModalOpen(false);
+            }
+          }}
         />
       ) : null}
       {isLineAdjustModalOpen && selectedFeature?.geometry.type === "LineString" ? (
