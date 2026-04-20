@@ -477,6 +477,67 @@ export function DatasetEditorPage() {
     dragStartFeaturesRef.current = null;
   }
 
+  function importFeaturesFromContent(
+    content: string,
+    sourceName: string,
+    sourceType: "geojson" | "gpx" | "auto" = "auto",
+  ) {
+    const trimmedContent = content.trim();
+
+    if (!trimmedContent) {
+      return false;
+    }
+
+    const normalizedSourceName = sourceName.toLowerCase();
+    const shouldParseAsGpx =
+      sourceType === "gpx" ||
+      normalizedSourceName.endsWith(".gpx") ||
+      trimmedContent.startsWith("<?xml") ||
+      trimmedContent.startsWith("<gpx");
+
+    try {
+      const importedFeatures = shouldParseAsGpx
+        ? parseGpx(trimmedContent)
+        : extractSupportedFeatures(JSON.parse(trimmedContent) as GeoJSON);
+
+      if (importedFeatures.length === 0) {
+        window.alert(
+          shouldParseAsGpx
+            ? "No supported GPX features found. Waypoints and tracks/routes with at least two points are imported."
+            : "No supported GeoJSON features found. Only Point, LineString, and Polygon are imported.",
+        );
+        return true;
+      }
+
+      commitFeatureChange({
+        ...features,
+        features: [...features.features, ...importedFeatures],
+      });
+      resetTransientEditorState();
+      mapActions.setPendingFitBounds(getFeatureBounds(importedFeatures));
+
+      return true;
+    } catch {
+      window.alert(
+        shouldParseAsGpx
+          ? "Failed to import GPX. Check that the content contains valid GPX XML."
+          : "Failed to import GeoJSON. Check that the content contains valid JSON.",
+      );
+      return true;
+    }
+  }
+
+  function looksLikeImportableClipboardText(content: string) {
+    const trimmedContent = content.trim();
+
+    return (
+      trimmedContent.startsWith("<?xml") ||
+      trimmedContent.startsWith("<gpx") ||
+      trimmedContent.startsWith("{") ||
+      trimmedContent.startsWith("[")
+    );
+  }
+
   async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
@@ -486,36 +547,56 @@ export function DatasetEditorPage() {
 
     try {
       const content = await file.text();
-      const fileName = file.name.toLowerCase();
-      const importedFeatures = fileName.endsWith(".gpx")
-        ? parseGpx(content)
-        : extractSupportedFeatures(JSON.parse(content) as GeoJSON);
-
-      if (importedFeatures.length === 0) {
-        window.alert(
-          fileName.endsWith(".gpx")
-            ? "No supported GPX features found. Waypoints and tracks/routes with at least two points are imported."
-            : "No supported GeoJSON features found. Only Point, LineString, and Polygon are imported.",
-        );
-        return;
-      }
-
-      commitFeatureChange({
-        ...features,
-        features: [...features.features, ...importedFeatures],
-      });
-      resetTransientEditorState();
-      mapActions.setPendingFitBounds(getFeatureBounds(importedFeatures));
-    } catch {
-      window.alert(
-        file.name.toLowerCase().endsWith(".gpx")
-          ? "Failed to import GPX. Check that the file contains valid GPX XML."
-          : "Failed to import GeoJSON. Check that the file contains valid JSON.",
-      );
+      importFeaturesFromContent(content, file.name);
     } finally {
       event.target.value = "";
     }
   }
+
+  const onWindowPaste = useEffectEvent((event: ClipboardEvent) => {
+    if (isTypingTarget(event.target)) {
+      return;
+    }
+
+    const clipboardData = event.clipboardData;
+
+    if (!clipboardData) {
+      return;
+    }
+
+    const file = Array.from(clipboardData.files).find((candidate) => {
+      const fileName = candidate.name.toLowerCase();
+
+      return fileName.endsWith(".geojson") || fileName.endsWith(".json") || fileName.endsWith(".gpx");
+    });
+
+    if (file) {
+      event.preventDefault();
+      void file.text().then((content) => {
+        importFeaturesFromContent(content, file.name);
+      });
+      return;
+    }
+
+    const text = clipboardData.getData("text/plain");
+
+    if (!looksLikeImportableClipboardText(text)) {
+      return;
+    }
+
+    if (importFeaturesFromContent(text, "clipboard", "auto")) {
+      event.preventDefault();
+    }
+  });
+
+  useEffect(() => {
+    function handlePaste(event: ClipboardEvent) {
+      onWindowPaste(event);
+    }
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [onWindowPaste]);
 
   const selectedFeature = selectedFeatureId
     ? features.features.find((feature) => String(feature.id) === selectedFeatureId) ?? null
