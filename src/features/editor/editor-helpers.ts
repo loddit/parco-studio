@@ -277,6 +277,65 @@ export function updateFeatureVertex(
   };
 }
 
+export function translateFeature(
+  collection: DatasetFeatureCollection,
+  featureId: string,
+  delta: LngLat,
+): DatasetFeatureCollection {
+  const [deltaLng, deltaLat] = delta;
+
+  if (deltaLng === 0 && deltaLat === 0) {
+    return collection;
+  }
+
+  return {
+    ...collection,
+    features: collection.features.map((feature) => {
+      if (String(feature.id) !== featureId) {
+        return feature;
+      }
+
+      if (feature.geometry.type === "Point") {
+        const [lng, lat, elevation] = feature.geometry.coordinates as LngLat;
+        return {
+          ...feature,
+          geometry: {
+            ...feature.geometry,
+            coordinates:
+              typeof elevation === "number" && !Number.isNaN(elevation)
+                ? [lng + deltaLng, lat + deltaLat, elevation]
+                : [lng + deltaLng, lat + deltaLat],
+          },
+        };
+      }
+
+      if (feature.geometry.type === "LineString") {
+        return {
+          ...feature,
+          geometry: {
+            ...feature.geometry,
+            coordinates: feature.geometry.coordinates.map((coordinate) =>
+              offsetCoordinate(coordinate as LngLat, deltaLng, deltaLat),
+            ) as Position[],
+          },
+        };
+      }
+
+      const ring = feature.geometry.coordinates[0] ?? [];
+
+      return {
+        ...feature,
+        geometry: {
+          ...feature.geometry,
+          coordinates: [
+            ring.map((coordinate) => offsetCoordinate(coordinate as LngLat, deltaLng, deltaLat)) as Position[],
+          ],
+        },
+      };
+    }),
+  };
+}
+
 /** Sets or clears the third coordinate (elevation in meters); lng/lat are preserved. */
 export function withElevationMeters(coordinate: LngLat, elevationMeters: number | null): LngLat {
   if (elevationMeters === null || Number.isNaN(elevationMeters) || !Number.isFinite(elevationMeters)) {
@@ -1070,4 +1129,12 @@ function mergeCoordinateElevation(current: LngLat, next: LngLat): LngLat {
   }
 
   return [next[0], next[1]];
+}
+
+function offsetCoordinate(coordinate: LngLat, deltaLng: number, deltaLat: number): LngLat {
+  if (typeof coordinate[2] === "number" && !Number.isNaN(coordinate[2])) {
+    return [coordinate[0] + deltaLng, coordinate[1] + deltaLat, coordinate[2]];
+  }
+
+  return [coordinate[0] + deltaLng, coordinate[1] + deltaLat];
 }

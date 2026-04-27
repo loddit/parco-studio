@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { GeocodingBar } from "./GeocodingBar";
 import { MapStyleSwitcher } from "./MapStyleSwitcher";
-import type { DatasetFeatureCollection, LngLat, LngLatBounds } from "@/types/dataset";
+import type { DatasetFeatureCollection, DatasetGeometry, LngLat, LngLatBounds } from "@/types/dataset";
 import {
   buildDraftFeatures,
   buildRenderableFeatures,
@@ -191,12 +191,16 @@ export type MapCanvasProps = {
   onMapClick: (event: MapCanvasLayerMouseEvent) => void;
   onMapHover: (coordinate: LngLat | null) => void;
   onInsertVertex: (featureId: string, segmentIndex: number) => void;
+  onSelectedFeatureDrag: (coordinate: LngLat) => void;
+  onSelectedFeatureDragEnd: (coordinate: LngLat) => void;
+  onSelectedFeatureDragStart: (featureId: string, coordinate: LngLat) => void;
   onSelectVertex: (event: MapCanvasMarkerEvent, featureId: string, vertexIndex: number) => void;
   onVertexDrag: (featureId: string, vertexIndex: number, coordinate: LngLat) => void;
   onVertexDragEnd: (featureId: string, vertexIndex: number, coordinate: LngLat) => void;
   onVertexDragStart: () => void;
   pendingLinkEndpoint: { featureId: string; vertexIndex: number } | null;
   selectedFeatureId: string | null;
+  selectedFeatureGeometryType: DatasetGeometry["type"] | null;
   selectedMidpoints: Array<{ coordinate: LngLat; segmentIndex: number }>;
   selectedRouteAnnotations: RouteAnnotation[];
   selectedVertexIndex: number | null;
@@ -232,12 +236,16 @@ function MapGLCanvas({
   onMapClick,
   onMapHover,
   onInsertVertex,
+  onSelectedFeatureDrag,
+  onSelectedFeatureDragEnd,
+  onSelectedFeatureDragStart,
   onSelectVertex,
   onVertexDrag,
   onVertexDragEnd,
   onVertexDragStart,
   pendingLinkEndpoint,
   selectedFeatureId,
+  selectedFeatureGeometryType,
   selectedMidpoints,
   selectedRouteAnnotations,
   selectedVertexIndex,
@@ -245,10 +253,33 @@ function MapGLCanvas({
   setIsHoveringSelectableFeature,
 }: MapCanvasProps) {
   const mapGLRef = useRef<MapGLMapRef | null>(null);
+  const isDraggingSelectedFeatureRef = useRef(false);
+  const hasMovedSelectedFeatureRef = useRef(false);
+  const lastDraggedCoordinateRef = useRef<LngLat | null>(null);
+  const suppressClickAfterSelectedFeatureDragRef = useRef(false);
   const center = mapState.viewport.center;
   const zoom = mapState.viewport.zoomLevel;
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const isLinkModeActive = pendingLinkEndpoint !== null;
+
+  useEffect(() => {
+    function handleWindowMouseUp() {
+      if (!isDraggingSelectedFeatureRef.current || !lastDraggedCoordinateRef.current) {
+        return;
+      }
+
+      isDraggingSelectedFeatureRef.current = false;
+      suppressClickAfterSelectedFeatureDragRef.current = hasMovedSelectedFeatureRef.current;
+      hasMovedSelectedFeatureRef.current = false;
+      onSelectedFeatureDragEnd(lastDraggedCoordinateRef.current);
+    }
+
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [onSelectedFeatureDragEnd]);
 
   const handleLocationSelect = useCallback(
     ({ center: locationCenter, bounds }: { center: LngLat; bounds?: LngLatBounds }) => {
@@ -296,6 +327,13 @@ function MapGLCanvas({
     dragPan: !isDraggingVertex,
     interactiveLayerIds: INTERACTIVE_LAYER_IDS,
     onClick: (event: MapGLLayerMouseEvent) => {
+      if (suppressClickAfterSelectedFeatureDragRef.current) {
+        suppressClickAfterSelectedFeatureDragRef.current = false;
+        event.preventDefault();
+        event.originalEvent.preventDefault();
+        return;
+      }
+
       onMapClick(event as unknown as MapCanvasLayerMouseEvent);
       if (mode === "select" && !getClickedFeatureId(event)) {
         onFeatureClick(null);
@@ -317,6 +355,13 @@ function MapGLCanvas({
       }
     },
     onMouseMove: (event: MapGLLayerMouseEvent) => {
+      if (isDraggingSelectedFeatureRef.current) {
+        hasMovedSelectedFeatureRef.current = true;
+        lastDraggedCoordinateRef.current = [event.lngLat.lng, event.lngLat.lat];
+        onSelectedFeatureDrag(lastDraggedCoordinateRef.current);
+        return;
+      }
+
       if (mode === "select") {
         setIsHoveringSelectableFeature(Boolean(getClickedFeatureId(event)));
         return;
@@ -329,8 +374,46 @@ function MapGLCanvas({
       onMapHover([event.lngLat.lng, event.lngLat.lat]);
     },
     onMouseLeave: () => {
+      if (isDraggingSelectedFeatureRef.current) {
+        isDraggingSelectedFeatureRef.current = false;
+        suppressClickAfterSelectedFeatureDragRef.current = hasMovedSelectedFeatureRef.current;
+        hasMovedSelectedFeatureRef.current = false;
+      }
+
       onMapHover(null);
       setIsHoveringSelectableFeature(false);
+    },
+    onMouseDown: (event: MapGLLayerMouseEvent) => {
+      const clickedFeatureId = getClickedFeatureId(event);
+
+      if (
+        mode !== "select" ||
+        !selectedFeatureId ||
+        selectedFeatureGeometryType === "Point" ||
+        selectedVertexIndex !== null ||
+        clickedFeatureId !== selectedFeatureId ||
+        isLinkModeActive
+      ) {
+        return;
+      }
+
+      isDraggingSelectedFeatureRef.current = true;
+      hasMovedSelectedFeatureRef.current = false;
+      lastDraggedCoordinateRef.current = [event.lngLat.lng, event.lngLat.lat];
+      event.preventDefault();
+      event.originalEvent.preventDefault();
+      onSelectedFeatureDragStart(selectedFeatureId, lastDraggedCoordinateRef.current);
+    },
+    onMouseUp: (event: MapGLLayerMouseEvent) => {
+      if (!isDraggingSelectedFeatureRef.current) {
+        return;
+      }
+
+      isDraggingSelectedFeatureRef.current = false;
+      suppressClickAfterSelectedFeatureDragRef.current = hasMovedSelectedFeatureRef.current;
+      hasMovedSelectedFeatureRef.current = false;
+      lastDraggedCoordinateRef.current = [event.lngLat.lng, event.lngLat.lat];
+      onSelectedFeatureDragEnd(lastDraggedCoordinateRef.current);
     },
     onMove: (event: { viewState: { longitude: number; latitude: number; zoom: number } }) => {
       mapActions.setViewport({

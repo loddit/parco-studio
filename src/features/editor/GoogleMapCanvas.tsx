@@ -57,12 +57,16 @@ export function GoogleMapCanvas({
   onMapClick,
   onMapHover,
   onInsertVertex,
+  onSelectedFeatureDrag,
+  onSelectedFeatureDragEnd,
+  onSelectedFeatureDragStart,
   onSelectVertex,
   onVertexDrag,
   onVertexDragEnd,
   onVertexDragStart,
   pendingLinkEndpoint,
   selectedFeatureId,
+  selectedFeatureGeometryType,
   selectedMidpoints,
   selectedRouteAnnotations,
   selectedVertexIndex,
@@ -156,13 +160,19 @@ export function GoogleMapCanvas({
         >
           <GoogleMapLayers
             draftFeatures={draftFeatures}
+            isLinkModeActive={isLinkModeActive}
             isDraggingVertex={isDraggingVertex}
             isHoveringSelectableFeature={isHoveringSelectableFeature}
             mode={mode}
             onMapClick={onMapClick}
+            onSelectedFeatureDrag={onSelectedFeatureDrag}
+            onSelectedFeatureDragEnd={onSelectedFeatureDragEnd}
+            onSelectedFeatureDragStart={onSelectedFeatureDragStart}
             pendingFitBounds={mapState.pendingFitBounds}
             renderedFeatures={renderedFeatures}
             selectedFeatureId={selectedFeatureId}
+            selectedFeatureGeometryType={selectedFeatureGeometryType}
+            selectedVertexIndex={selectedVertexIndex}
             setIsHoveringSelectableFeature={setIsHoveringSelectableFeature}
             setPendingFitBounds={mapActions.setPendingFitBounds}
           />
@@ -327,24 +337,36 @@ function getGoogleMapTypeId(
 
 function GoogleMapLayers({
   draftFeatures,
+  isLinkModeActive,
   isDraggingVertex,
   isHoveringSelectableFeature,
   mode,
   onMapClick,
+  onSelectedFeatureDrag,
+  onSelectedFeatureDragEnd,
+  onSelectedFeatureDragStart,
   pendingFitBounds,
   renderedFeatures,
   selectedFeatureId,
+  selectedFeatureGeometryType,
+  selectedVertexIndex,
   setIsHoveringSelectableFeature,
   setPendingFitBounds,
 }: {
   draftFeatures: FeatureCollection<Geometry>;
+  isLinkModeActive: boolean;
   isDraggingVertex: boolean;
   isHoveringSelectableFeature: boolean;
   mode: MapCanvasProps["mode"];
   onMapClick: MapCanvasProps["onMapClick"];
+  onSelectedFeatureDrag: MapCanvasProps["onSelectedFeatureDrag"];
+  onSelectedFeatureDragEnd: MapCanvasProps["onSelectedFeatureDragEnd"];
+  onSelectedFeatureDragStart: MapCanvasProps["onSelectedFeatureDragStart"];
   pendingFitBounds: MapCanvasProps["mapState"]["pendingFitBounds"];
   renderedFeatures: FeatureCollection<Geometry>;
   selectedFeatureId: MapCanvasProps["selectedFeatureId"];
+  selectedFeatureGeometryType: MapCanvasProps["selectedFeatureGeometryType"];
+  selectedVertexIndex: MapCanvasProps["selectedVertexIndex"];
   setIsHoveringSelectableFeature: MapCanvasProps["setIsHoveringSelectableFeature"];
   setPendingFitBounds: MapCanvasProps["mapActions"]["setPendingFitBounds"];
 }) {
@@ -352,7 +374,30 @@ function GoogleMapLayers({
   const renderedLayerRef = useRef<google.maps.Data | null>(null);
   const draftLayerRef = useRef<google.maps.Data | null>(null);
   const lastFeatureClickAtRef = useRef(0);
+  const isDraggingSelectedFeatureRef = useRef(false);
+  const hasMovedSelectedFeatureRef = useRef(false);
+  const lastDraggedCoordinateRef = useRef<LngLat | null>(null);
+  const suppressClickAfterSelectedFeatureDragRef = useRef(false);
   const cursor = getMapCursor(mode, isDraggingVertex, isHoveringSelectableFeature);
+
+  useEffect(() => {
+    function handleWindowMouseUp() {
+      if (!isDraggingSelectedFeatureRef.current || !lastDraggedCoordinateRef.current) {
+        return;
+      }
+
+      isDraggingSelectedFeatureRef.current = false;
+      suppressClickAfterSelectedFeatureDragRef.current = hasMovedSelectedFeatureRef.current;
+      hasMovedSelectedFeatureRef.current = false;
+      onSelectedFeatureDragEnd(lastDraggedCoordinateRef.current);
+    }
+
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [onSelectedFeatureDragEnd]);
 
   useEffect(() => {
     if (!map) {
@@ -410,6 +455,11 @@ function GoogleMapLayers({
         return;
       }
 
+      if (suppressClickAfterSelectedFeatureDragRef.current) {
+        suppressClickAfterSelectedFeatureDragRef.current = false;
+        return;
+      }
+
       event.domEvent?.stopPropagation?.();
       lastFeatureClickAtRef.current = performance.now();
       onMapClick(
@@ -433,12 +483,45 @@ function GoogleMapLayers({
       }
     });
 
+    const mouseDownListener = renderedLayer.addListener("mousedown", (event: google.maps.Data.MouseEvent) => {
+      const latLng = event.latLng?.toJSON();
+      const featureId = String(event.feature.getProperty("featureId") ?? "");
+
+      if (
+        !latLng ||
+        mode !== "select" ||
+        !selectedFeatureId ||
+        selectedFeatureGeometryType === "Point" ||
+        selectedVertexIndex !== null ||
+        featureId !== selectedFeatureId ||
+        isLinkModeActive
+      ) {
+        return;
+      }
+
+      event.domEvent?.stopPropagation?.();
+      isDraggingSelectedFeatureRef.current = true;
+      hasMovedSelectedFeatureRef.current = false;
+      lastDraggedCoordinateRef.current = [latLng.lng, latLng.lat];
+      onSelectedFeatureDragStart(selectedFeatureId, lastDraggedCoordinateRef.current);
+    });
+
     return () => {
       clickListener.remove();
       mouseOverListener.remove();
       mouseOutListener.remove();
+      mouseDownListener.remove();
     };
-  }, [mode, onMapClick, setIsHoveringSelectableFeature]);
+  }, [
+    isLinkModeActive,
+    mode,
+    onMapClick,
+    onSelectedFeatureDragStart,
+    selectedFeatureGeometryType,
+    selectedFeatureId,
+    selectedVertexIndex,
+    setIsHoveringSelectableFeature,
+  ]);
 
   useEffect(() => {
     if (!map) {
@@ -449,6 +532,11 @@ function GoogleMapLayers({
       const latLng = event.latLng?.toJSON();
 
       if (!latLng) {
+        return;
+      }
+
+      if (suppressClickAfterSelectedFeatureDragRef.current) {
+        suppressClickAfterSelectedFeatureDragRef.current = false;
         return;
       }
 
@@ -464,10 +552,38 @@ function GoogleMapLayers({
       );
     });
 
+    const mouseMoveListener = map.addListener("mousemove", (event: google.maps.MapMouseEvent) => {
+      const latLng = event.latLng?.toJSON();
+
+      if (!isDraggingSelectedFeatureRef.current || !latLng) {
+        return;
+      }
+
+      hasMovedSelectedFeatureRef.current = true;
+      lastDraggedCoordinateRef.current = [latLng.lng, latLng.lat];
+      onSelectedFeatureDrag(lastDraggedCoordinateRef.current);
+    });
+
+    const mouseUpListener = map.addListener("mouseup", (event: google.maps.MapMouseEvent) => {
+      const latLng = event.latLng?.toJSON();
+
+      if (!isDraggingSelectedFeatureRef.current || !latLng) {
+        return;
+      }
+
+      isDraggingSelectedFeatureRef.current = false;
+      suppressClickAfterSelectedFeatureDragRef.current = hasMovedSelectedFeatureRef.current;
+      hasMovedSelectedFeatureRef.current = false;
+      lastDraggedCoordinateRef.current = [latLng.lng, latLng.lat];
+      onSelectedFeatureDragEnd(lastDraggedCoordinateRef.current);
+    });
+
     return () => {
       clickListener.remove();
+      mouseMoveListener.remove();
+      mouseUpListener.remove();
     };
-  }, [map, onMapClick]);
+  }, [map, onMapClick, onSelectedFeatureDrag, onSelectedFeatureDragEnd]);
 
   useEffect(() => {
     if (!map || !pendingFitBounds) {

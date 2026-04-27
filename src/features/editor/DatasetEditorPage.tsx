@@ -44,6 +44,7 @@ import {
   reverseLineFeatureCoordinates,
   simplifyLineCoordinatesByRdpRatio,
   splitLineFeatureAtVertex,
+  translateFeature,
   updateFeatureVertex,
   updateFeatureVertexElevation,
 } from "./editor-helpers";
@@ -65,6 +66,10 @@ export function DatasetEditorPage() {
   const undoStackRef = useRef<DatasetFeatureCollection[]>([]);
   const redoStackRef = useRef<DatasetFeatureCollection[]>([]);
   const dragStartFeaturesRef = useRef<DatasetFeatureCollection | null>(null);
+  const draggedFeatureRef = useRef<{
+    featureId: string;
+    origin: LngLat;
+  } | null>(null);
   const { mapState, mapActions } = useEditorMapState({
     initialViewport: {
       center: [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
@@ -125,6 +130,7 @@ export function DatasetEditorPage() {
     undoStackRef.current = [];
     redoStackRef.current = [];
     dragStartFeaturesRef.current = null;
+    draggedFeatureRef.current = null;
     resetTransientEditorState();
     mapActions.setViewport({
       center: nextDataset.center ?? [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
@@ -155,6 +161,7 @@ export function DatasetEditorPage() {
     undoStackRef.current = [];
     redoStackRef.current = [];
     dragStartFeaturesRef.current = null;
+    draggedFeatureRef.current = null;
     resetTransientEditorState();
     mapActions.setViewport({
       center: dataset.center ?? [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
@@ -459,6 +466,69 @@ export function DatasetEditorPage() {
   function handleVertexDragStart() {
     setIsDraggingVertex(true);
     dragStartFeaturesRef.current = cloneFeatureCollection(features);
+  }
+
+  function handleSelectedFeatureDragStart(featureId: string, coordinate: LngLat) {
+    const feature = features.features.find((item) => String(item.id) === featureId);
+
+    if (!feature || (feature.geometry.type !== "LineString" && feature.geometry.type !== "Polygon")) {
+      return;
+    }
+
+    setIsDraggingVertex(true);
+    setSelectedFeatureId(featureId);
+    setSelectedVertexIndex(null);
+    setPendingLinkEndpoint(null);
+    dragStartFeaturesRef.current = cloneFeatureCollection(features);
+    draggedFeatureRef.current = {
+      featureId,
+      origin: coordinate,
+    };
+  }
+
+  function handleSelectedFeatureDrag(coordinate: LngLat) {
+    const dragState = draggedFeatureRef.current;
+    const startFeatures = dragStartFeaturesRef.current;
+
+    if (!dragState || !startFeatures) {
+      return;
+    }
+
+    setFeatures(
+      translateFeature(startFeatures, dragState.featureId, [
+        coordinate[0] - dragState.origin[0],
+        coordinate[1] - dragState.origin[1],
+      ]),
+    );
+  }
+
+  function handleSelectedFeatureDragEnd(coordinate: LngLat) {
+    const dragState = draggedFeatureRef.current;
+    const startFeatures = dragStartFeaturesRef.current;
+
+    setIsDraggingVertex(false);
+
+    if (!dragState || !startFeatures) {
+      draggedFeatureRef.current = null;
+      dragStartFeaturesRef.current = null;
+      return;
+    }
+
+    const nextFeatures = translateFeature(startFeatures, dragState.featureId, [
+      coordinate[0] - dragState.origin[0],
+      coordinate[1] - dragState.origin[1],
+    ]);
+
+    if (JSON.stringify(startFeatures) !== JSON.stringify(nextFeatures)) {
+      undoStackRef.current = [...undoStackRef.current, cloneFeatureCollection(startFeatures)].slice(
+        -HISTORY_LIMIT,
+      );
+      redoStackRef.current = [];
+    }
+
+    setFeatures(nextFeatures);
+    draggedFeatureRef.current = null;
+    dragStartFeaturesRef.current = null;
   }
 
   function handleVertexDragEnd(featureId: string, vertexIndex: number, coordinate: LngLat) {
@@ -861,12 +931,16 @@ export function DatasetEditorPage() {
             onMapHover={setHoverCoordinate}
             onInsertVertex={handleInsertVertex}
             onLinkEndpointClick={handleLinkEndpointClick}
+            onSelectedFeatureDrag={handleSelectedFeatureDrag}
+            onSelectedFeatureDragEnd={handleSelectedFeatureDragEnd}
+            onSelectedFeatureDragStart={handleSelectedFeatureDragStart}
             onSelectVertex={handleSelectVertex}
             onVertexDrag={handleVertexDrag}
             onVertexDragEnd={handleVertexDragEnd}
             onVertexDragStart={handleVertexDragStart}
             pendingLinkEndpoint={pendingLinkEndpoint}
             selectedFeatureId={selectedFeatureId}
+            selectedFeatureGeometryType={selectedFeature?.geometry.type ?? null}
             linkableLineEndpoints={linkableLineEndpoints}
             selectedMidpoints={selectedMidpoints}
             selectedRouteAnnotations={selectedRouteAnnotations}
