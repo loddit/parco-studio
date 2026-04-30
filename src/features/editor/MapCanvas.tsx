@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GeocodingBar } from "./GeocodingBar";
 import { MapStyleSwitcher } from "./MapStyleSwitcher";
 import type { DatasetFeatureCollection, DatasetGeometry, LngLat, LngLatBounds } from "@/types/dataset";
@@ -7,6 +7,7 @@ import {
   buildRenderableFeatures,
   getClickedFeatureId,
   getMapCursor,
+  isCoordinateInBounds,
   type LinkableLineEndpoint,
   type RouteAnnotation,
 } from "./editor-helpers";
@@ -155,6 +156,8 @@ const DRAFT_POINT_LAYER: MapGLLayerProps<"circle"> = {
   },
 };
 
+const VERTEX_DETAIL_MIN_ZOOM = 16;
+
 export type MapCanvasLayerMouseEvent = {
   features?: Array<{ properties?: Record<string, unknown> | null }>;
   lngLat: { lat: number; lng: number };
@@ -257,10 +260,12 @@ function MapGLCanvas({
   const hasMovedSelectedFeatureRef = useRef(false);
   const lastDraggedCoordinateRef = useRef<LngLat | null>(null);
   const suppressClickAfterSelectedFeatureDragRef = useRef(false);
+  const [visibleBounds, setVisibleBounds] = useState<LngLatBounds | null>(null);
   const center = mapState.viewport.center;
   const zoom = mapState.viewport.zoomLevel;
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const isLinkModeActive = pendingLinkEndpoint !== null;
+  const shouldRenderVertexDetails = zoom >= VERTEX_DETAIL_MIN_ZOOM;
 
   useEffect(() => {
     function handleWindowMouseUp() {
@@ -303,7 +308,43 @@ function MapGLCanvas({
     () => buildDraftFeatures(mode, draftCoordinates, hoverCoordinate),
     [draftCoordinates, hoverCoordinate, mode],
   );
+  const visibleSelectedMidpoints = useMemo(
+    () =>
+      !visibleBounds
+        ? []
+        : selectedMidpoints.filter((midpoint) => isCoordinateInBounds(midpoint.coordinate, visibleBounds)),
+    [selectedMidpoints, visibleBounds],
+  );
+  const visibleSelectedVertices = useMemo(
+    () =>
+      !visibleBounds
+        ? []
+        : selectedVertices.flatMap((vertex, index) =>
+            isCoordinateInBounds(vertex, visibleBounds) ? [{ vertex, index }] : [],
+          ),
+    [selectedVertices, visibleBounds],
+  );
+  const visibleLinkableLineEndpoints = useMemo(
+    () =>
+      !visibleBounds
+        ? []
+        : linkableLineEndpoints.filter((endpoint) => isCoordinateInBounds(endpoint.coordinate, visibleBounds)),
+    [linkableLineEndpoints, visibleBounds],
+  );
   const isMapbox = mapState.mapRenderer === "mapbox";
+
+  const syncVisibleBounds = useCallback(() => {
+    const bounds = mapGLRef.current?.getBounds();
+
+    if (!bounds) {
+      return;
+    }
+
+    setVisibleBounds([
+      [bounds.getWest(), bounds.getSouth()],
+      [bounds.getEast(), bounds.getNorth()],
+    ]);
+  }, []);
 
   useEffect(() => {
     if (!mapState.pendingFitBounds || !mapGLRef.current) {
@@ -420,7 +461,9 @@ function MapGLCanvas({
         center: [event.viewState.longitude, event.viewState.latitude],
         zoomLevel: event.viewState.zoom,
       });
+      syncVisibleBounds();
     },
+    onLoad: syncVisibleBounds,
     style: { width: "100%", height: "100%" },
   };
 
@@ -469,9 +512,9 @@ function MapGLCanvas({
               <div className="h-3 w-3 rounded-full border border-amber-500 bg-amber-200 shadow-sm" />
             </Marker>
           ) : null}
-          {mode === "select" && selectedFeatureId ? (
+          {mode === "select" && selectedFeatureId && shouldRenderVertexDetails ? (
             <>
-              {selectedMidpoints.map((midpoint) => (
+              {visibleSelectedMidpoints.map((midpoint) => (
                 <Marker
                   key={`${selectedFeatureId}-midpoint-${midpoint.segmentIndex}`}
                   latitude={midpoint.coordinate[1]}
@@ -484,7 +527,7 @@ function MapGLCanvas({
                   />
                 </Marker>
               ))}
-              {selectedVertices.map((vertex, index) => (
+              {visibleSelectedVertices.map(({ vertex, index }) => (
                 <Marker
                   draggable={!isLinkModeActive}
                   key={`${selectedFeatureId}-${index}`}
@@ -530,8 +573,8 @@ function MapGLCanvas({
               ))}
             </>
           ) : null}
-          {mode === "select" && isLinkModeActive
-            ? linkableLineEndpoints
+          {mode === "select" && isLinkModeActive && shouldRenderVertexDetails
+            ? visibleLinkableLineEndpoints
                 .filter(
                   (endpoint) =>
                     endpoint.featureId !== selectedFeatureId ||

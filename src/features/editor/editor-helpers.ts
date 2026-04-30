@@ -224,6 +224,22 @@ export function getLinkableLineEndpoints(collection: DatasetFeatureCollection): 
   });
 }
 
+export function isCoordinateInBounds(coordinate: LngLat, bounds: LngLatBounds) {
+  const [southWest, northEast] = bounds;
+  const longitude = coordinate[0];
+  const latitude = coordinate[1];
+  const west = southWest[0];
+  const south = southWest[1];
+  const east = northEast[0];
+  const north = northEast[1];
+  const isLongitudeInRange =
+    west <= east
+      ? longitude >= west && longitude <= east
+      : longitude >= west || longitude <= east;
+
+  return isLongitudeInRange && latitude >= south && latitude <= north;
+}
+
 export function updateFeatureVertex(
   collection: DatasetFeatureCollection,
   featureId: string,

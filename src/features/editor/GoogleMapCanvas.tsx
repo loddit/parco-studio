@@ -16,12 +16,13 @@ import {
   type MapMouseEvent as GoogleMapMouseEvent,
 } from "@vis.gl/react-google-maps";
 import type { FeatureCollection, Geometry } from "geojson";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LngLat, LngLatBounds } from "@/types/dataset";
 import {
   buildDraftFeatures,
   buildRenderableFeatures,
   getMapCursor,
+  isCoordinateInBounds,
   type RouteAnnotation,
 } from "./editor-helpers";
 import { GoogleGeocodingBar } from "./GoogleGeocodingBar";
@@ -38,6 +39,7 @@ const MAP_STYLE_ICON_MAP = {
 
 const GOOGLE_MAPS_LIBRARIES = ["marker"] as const;
 const GOOGLE_MAPS_ZOOM_OFFSET = 1;
+const VERTEX_DETAIL_MIN_ZOOM = 16;
 
 type GoogleMapCanvasProps = MapCanvasProps;
 
@@ -77,6 +79,8 @@ export function GoogleMapCanvas({
   const googleMapsId = import.meta.env.VITE_GOOGLE_MAPS_ID?.trim() ?? "";
   const googleMapsZoomLevel = mapState.viewport.zoomLevel + GOOGLE_MAPS_ZOOM_OFFSET;
   const isLinkModeActive = pendingLinkEndpoint !== null;
+  const [visibleBounds, setVisibleBounds] = useState<LngLatBounds | null>(null);
+  const shouldRenderVertexDetails = mapState.viewport.zoomLevel >= VERTEX_DETAIL_MIN_ZOOM;
   const renderedFeatures = useMemo(
     () => buildRenderableFeatures(features, selectedFeatureId),
     [features, selectedFeatureId],
@@ -84,6 +88,29 @@ export function GoogleMapCanvas({
   const draftFeatures = useMemo(
     () => buildDraftFeatures(mode, draftCoordinates, hoverCoordinate),
     [draftCoordinates, hoverCoordinate, mode],
+  );
+  const visibleSelectedMidpoints = useMemo(
+    () =>
+      !visibleBounds
+        ? []
+        : selectedMidpoints.filter((midpoint) => isCoordinateInBounds(midpoint.coordinate, visibleBounds)),
+    [selectedMidpoints, visibleBounds],
+  );
+  const visibleSelectedVertices = useMemo(
+    () =>
+      !visibleBounds
+        ? []
+        : selectedVertices.flatMap((vertex, index) =>
+            isCoordinateInBounds(vertex, visibleBounds) ? [{ vertex, index }] : [],
+          ),
+    [selectedVertices, visibleBounds],
+  );
+  const visibleLinkableLineEndpoints = useMemo(
+    () =>
+      !visibleBounds
+        ? []
+        : linkableLineEndpoints.filter((endpoint) => isCoordinateInBounds(endpoint.coordinate, visibleBounds)),
+    [linkableLineEndpoints, visibleBounds],
   );
 
   const handleLocationSelect = useCallback(
@@ -158,6 +185,7 @@ export function GoogleMapCanvas({
           style={{ width: "100%", height: "100%" }}
           zoom={googleMapsZoomLevel}
         >
+          <GoogleMapBoundsSync onBoundsChange={setVisibleBounds} />
           <GoogleMapLayers
             draftFeatures={draftFeatures}
             isLinkModeActive={isLinkModeActive}
@@ -191,9 +219,9 @@ export function GoogleMapCanvas({
             </AdvancedMarker>
           ) : null}
 
-          {mode === "select" && selectedFeatureId ? (
+          {mode === "select" && selectedFeatureId && shouldRenderVertexDetails ? (
             <>
-              {selectedMidpoints.map((midpoint) => (
+              {visibleSelectedMidpoints.map((midpoint) => (
                 <AdvancedMarker
                   anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
                   clickable
@@ -214,7 +242,7 @@ export function GoogleMapCanvas({
                 </AdvancedMarker>
               ))}
 
-              {selectedVertices.map((vertex, index) => (
+              {visibleSelectedVertices.map(({ vertex, index }) => (
                 <AdvancedMarker
                   anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
                   clickable
@@ -272,8 +300,8 @@ export function GoogleMapCanvas({
               ))}
             </>
           ) : null}
-          {mode === "select" && isLinkModeActive
-            ? linkableLineEndpoints
+          {mode === "select" && isLinkModeActive && shouldRenderVertexDetails
+            ? visibleLinkableLineEndpoints
                 .filter(
                   (endpoint) =>
                     endpoint.featureId !== selectedFeatureId ||
@@ -333,6 +361,46 @@ function getGoogleMapTypeId(
   }
 
   return "roadmap";
+}
+
+function GoogleMapBoundsSync({
+  onBoundsChange,
+}: {
+  onBoundsChange: (bounds: LngLatBounds | null) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) {
+      return;
+    }
+
+    const syncBounds = () => {
+      const bounds = map.getBounds();
+
+      if (!bounds) {
+        onBoundsChange(null);
+        return;
+      }
+
+      const southWest = bounds.getSouthWest();
+      const northEast = bounds.getNorthEast();
+      onBoundsChange([
+        [southWest.lng(), southWest.lat()],
+        [northEast.lng(), northEast.lat()],
+      ]);
+    };
+
+    syncBounds();
+
+    const boundsListener = map.addListener("bounds_changed", syncBounds);
+
+    return () => {
+      boundsListener.remove();
+    };
+  }, [map, onBoundsChange]);
+
+  return null;
 }
 
 function GoogleMapLayers({
