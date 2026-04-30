@@ -1,5 +1,5 @@
 import type { Feature, GeoJSON, LineString } from "geojson";
-import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useToast } from "@/components/Toast";
 import { getDataset, saveDatasetState } from "@/lib/datasets-db";
@@ -610,54 +610,86 @@ export function DatasetEditorPage() {
     }
   }
 
-  const selectedFeature = selectedFeatureId
-    ? features.features.find((feature) => String(feature.id) === selectedFeatureId) ?? null
-    : null;
-  const selectedFeatureIndexInCollection = selectedFeatureId
-    ? features.features.findIndex((feature) => String(feature.id) === selectedFeatureId)
-    : -1;
+  const selectedFeature = useMemo(
+    () =>
+      selectedFeatureId
+        ? features.features.find((feature) => String(feature.id) === selectedFeatureId) ?? null
+        : null,
+    [features, selectedFeatureId],
+  );
+  const selectedFeatureIndexInCollection = useMemo(
+    () =>
+      selectedFeatureId
+        ? features.features.findIndex((feature) => String(feature.id) === selectedFeatureId)
+        : -1,
+    [features, selectedFeatureId],
+  );
   const selectedFeatureOrdinal =
     selectedFeatureIndexInCollection >= 0 ? selectedFeatureIndexInCollection + 1 : null;
-  const selectedVertices = selectedFeature ? getFeatureVertices(selectedFeature) : [];
-  const selectedMidpoints = selectedFeature ? getFeatureMidpoints(selectedFeature) : [];
-  const selectedRouteAnnotations =
-    isRouteAnnotationsVisible && selectedFeature?.geometry.type === "LineString"
-      ? getLineRouteAnnotations(selectedVertices)
-      : [];
-  const selectedFeatureLength =
-    selectedFeature?.geometry.type === "LineString"
-      ? formatLineLength(
-          getLineDistanceToVertex(
-            selectedFeature as Feature<LineString>,
-            selectedVertices.length - 1,
-          ),
-        )
-      : null;
-  const selectedFeatureArea =
-    selectedFeature?.geometry.type === "Polygon"
-      ? formatArea(getPolygonArea(selectedVertices))
-      : null;
-  const draftLength =
-    mode === "draw-line" && draftCoordinates.length >= 2
-      ? formatLineLength(getLineLength(draftCoordinates))
-      : null;
-  const draftArea =
-    mode === "draw-polygon" && draftCoordinates.length >= 3
-      ? formatArea(getPolygonArea(draftCoordinates))
-      : null;
-  const selectedVertexDistanceFromStart =
-    selectedFeature?.geometry.type === "LineString" && selectedVertexIndex !== null
-      ? formatLineLength(
-          getLineDistanceToVertex(selectedFeature as Feature<LineString>, selectedVertexIndex),
-        )
-      : null;
+  const selectedVertices = useMemo(
+    () => (selectedFeature ? getFeatureVertices(selectedFeature) : []),
+    [selectedFeature],
+  );
+  const selectedMidpoints = useMemo(
+    () => (selectedFeature ? getFeatureMidpoints(selectedFeature) : []),
+    [selectedFeature],
+  );
+  const selectedRouteAnnotations = useMemo(
+    () =>
+      isRouteAnnotationsVisible && selectedFeature?.geometry.type === "LineString"
+        ? getLineRouteAnnotations(selectedVertices)
+        : [],
+    [isRouteAnnotationsVisible, selectedFeature, selectedVertices],
+  );
+  const selectedFeatureLength = useMemo(
+    () =>
+      selectedFeature?.geometry.type === "LineString"
+        ? formatLineLength(
+            getLineDistanceToVertex(
+              selectedFeature as Feature<LineString>,
+              selectedVertices.length - 1,
+            ),
+          )
+        : null,
+    [selectedFeature, selectedVertices],
+  );
+  const selectedFeatureArea = useMemo(
+    () =>
+      selectedFeature?.geometry.type === "Polygon"
+        ? formatArea(getPolygonArea(selectedVertices))
+        : null,
+    [selectedFeature, selectedVertices],
+  );
+  const draftLength = useMemo(
+    () =>
+      mode === "draw-line" && draftCoordinates.length >= 2
+        ? formatLineLength(getLineLength(draftCoordinates))
+        : null,
+    [draftCoordinates, mode],
+  );
+  const draftArea = useMemo(
+    () =>
+      mode === "draw-polygon" && draftCoordinates.length >= 3
+        ? formatArea(getPolygonArea(draftCoordinates))
+        : null,
+    [draftCoordinates, mode],
+  );
+  const selectedVertexDistanceFromStart = useMemo(
+    () =>
+      selectedFeature?.geometry.type === "LineString" && selectedVertexIndex !== null
+        ? formatLineLength(
+            getLineDistanceToVertex(selectedFeature as Feature<LineString>, selectedVertexIndex),
+          )
+        : null,
+    [selectedFeature, selectedVertexIndex],
+  );
   const selectedFeatureElevationMeters =
     selectedFeature?.geometry.type === "Point"
       ? getCoordinateElevation(selectedFeature.geometry.coordinates as LngLat)
       : null;
   const selectedVertexElevationMeters =
     selectedVertexIndex !== null ? getCoordinateElevation(selectedVertices[selectedVertexIndex]) : null;
-  const linkableLineEndpoints = getLinkableLineEndpoints(features);
+  const linkableLineEndpoints = useMemo(() => getLinkableLineEndpoints(features), [features]);
   const canSplitSelectedLineString =
     selectedFeature?.geometry.type === "LineString" &&
     selectedVertexIndex !== null &&
@@ -673,11 +705,18 @@ export function DatasetEditorPage() {
     canLinkSelectedLineString &&
     pendingLinkEndpoint?.featureId === selectedFeatureId &&
     pendingLinkEndpoint.vertexIndex === selectedVertexIndex;
-  const isDirty =
+  const isFeatureDirty = useMemo(() => {
+    if (!dataset) {
+      return true;
+    }
+
+    return JSON.stringify(dataset.features) !== JSON.stringify(features);
+  }, [dataset, features]);
+  const isViewportDirty =
     !dataset ||
-    JSON.stringify(dataset.features) !== JSON.stringify(features) ||
     JSON.stringify(dataset.center) !== JSON.stringify(mapState.viewport.center) ||
     dataset.zoomLevel !== mapState.viewport.zoomLevel;
+  const isDirty = isFeatureDirty || isViewportDirty;
 
   function handleExportSelectedFeature() {
     if (!selectedFeature) {
